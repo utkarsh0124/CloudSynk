@@ -1,0 +1,344 @@
+body {
+    font-family: Comfortaa;
+    background-color: #f7f9fc;
+    /* background-color: #D1D7E0; */
+    /* 802BB1
+    564F6F
+    `
+    4C495D
+     */
+}
+
+/* ===============SIDEBAR============================= */
+
+.sidebar {
+    /* border: 2px solid black; */
+    padding-top: 1px;
+    width: 350px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 999;
+    box-shadow: #4C495D 0px 25px 20px -12px;
+}
+
+.sidebar-logo{
+    height:120px; 
+    padding-top: 20px;
+    padding-left: 10px;
+}
+
+.sidebar-options{
+    /* border: 2px solid black; */
+    padding-top:20px;
+    padding-left: 20px;
+}
+
+.sidebar-content{
+    margin-top: 30px;
+    padding-left: 10px;
+}
+
+.sidebar-button{
+    /* border: 2px solid black;  */
+    width:300px;
+    height:60px;
+    padding-top: 10px;
+    padding-left: 20px;
+}
+
+.card {
+    border: none;
+    border-radius: 10px
+}
+
+.c-details span {
+    font-weight: 300;
+    font-size: 13px
+}
+
+.icon {
+    width: 50px;
+    height: 50px;
+    background-color: #eee;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 39px
+}
+
+.badge span {
+    background-color: #fffbec;
+    width: 70px;
+    height: 25px;
+    padding-top: 2px;
+    border-radius: 5px;
+    display: flex;
+    color: #fed85d;
+    justify-content: center;
+    align-items: center
+}
+
+.progress {
+    height: 10px;
+    border-radius: 10px
+}
+
+.progress div {
+    background-color: #2D283E;
+}
+
+.text1 {
+    font-size: 14px;
+    font-weight: 600
+}
+
+.text2 {
+    color: #a5aec0
+}
+
+/* ===============END SIDEBAR============================= */
+
+
+.login-logout {
+    /* border: 3px solid black; */
+    font-size: larger;
+    padding-left: 500px;
+    list-style-type: none;
+}
+
+.username {
+    padding-top: 11px;
+    font-weight: bolder;
+    font-size: medium;
+}
+
+.logo{
+    font-family: monospace;
+    font-weight: bold;
+    color:#2D283E;
+}
+
+.container-search{
+    /* border: 3px solid black; */
+    margin-left: 350px;
+    height: 60px;
+    background-color: #f7f9fc;
+}
+
+.input-search{
+    /* border: 2px solid black; */
+    float:left;
+    width: 600px;
+}
+
+.input-group{
+    padding-left: 50px;
+    padding-top: 10px;
+    max-width: 500px;
+}
+
+.container-sort{
+    /* border: 2px solid black; */
+    margin-left: 350px;
+    padding-left: 40px;
+    padding-top: 10px;
+    height:60px;
+    background-color: #f7f9fc;
+    box-shadow: #4C495D 0px 25px 20px -29px;
+}
+
+.btn-container{
+    /* border: 2px solid black; */
+    float:left;
+    padding-left: 10px;
+}
+
+.btn-top:hover{
+    background-color: #2D283E;
+    color:#f7f9fc;
+}
+
+.container-main{
+    /* border: 2px solid black; */
+    margin-left: 350px;
+    padding-top: 100px;
+    padding-left: 50px;
+}
+
+.btn-home {
+    background-color: white;
+    color:black;
+    width:260px;
+    position: relative;
+    border-radius: 50px;
+    border: none;
+    padding-left: 90px;
+}
+
+.btn-home:hover {
+    background-color: #2D283E;
+    color:white;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+.btn-home span {
+    padding-right: 100px;
+}
+
+/* Style for the circle */
+.btn-home::after {
+    content: "\1F3E0"; /* Unicode character code for 🏠 emoji */
+    position: absolute;
+    top: 18.3px;
+    right: 86.8%; /* Shift the circle to the right edge of the button */
+    transform: translateY(-50%);
+    width: 35.5px; /* Adjust the size of the circle */
+    height: 35.5px; /* Adjust the size of the circle */
+    font-size: 20px; /* Adjust the font size to fit the emoji within the circle */
+    background-color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white; /* Color of the emoji */
+    border-color: black;
+}
+
+.btn-home:hover::after {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+.btn-about {
+    background-color: white;
+    color:black;
+    width: 260px;
+    position: relative;
+    border-radius: 50px;
+    border: none;
+    padding-left: 90px;
+}
+
+.btn-about:hover {
+    background-color: #2D283E;
+    color:white;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+.btn-about span {
+    padding-right: 100px;
+}
+
+/* Style for the circle */
+.btn-about::after {
+    content: "\1F4F0"; /* Unicode character code for 📰 emoji */
+    position: absolute;
+    top: 18.3px;
+    right: 86.8%; /* Shift the circle to the right edge of the button */
+    transform: translateY(-50%);
+    width: 35.5px; /* Adjust the size of the circle */
+    height: 35.5px; /* Adjust the size of the circle */
+    font-size: 20px; /* Adjust the font size to fit the emoji within the circle */
+    background-color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white; /* Color of the emoji */
+    border-color: black;
+}
+
+.btn-about:hover::after {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+.btn-share {
+    background-color: white;
+    color:black;
+    width: 260px;
+    position: relative;
+    border-radius: 50px;
+    border: none;
+    padding-left:81px;
+}
+
+.btn-share:hover {
+    background-color: #2D283E;
+    color:white;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+.btn-share span {
+    padding-right: 100px;
+}
+
+/* Style for the circle */
+.btn-share::after {
+    content: "\1F517"; /*Unicode character code for 🔗 emoji */
+    position: absolute;
+    top: 18.3px;
+    right: 86.8%; /* Shift the circle to the right edge of the button */
+    transform: translateY(-50%);
+    width: 35.5px; /* Adjust the size of the circle */
+    height: 35.5px; /* Adjust the size of the circle */
+    font-size: 20px; /* Adjust the font size to fit the emoji within the circle */
+    background-color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white; /* Color of the emoji */
+    border-color: black;
+}
+
+.btn-share:hover::after {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+
+
+.btn-down {
+    background-color: white;
+    color:black;
+    width: 260px;
+    position: relative;
+    border-radius: 50px;
+    border: none;
+    padding-left:81px;
+}
+
+.btn-down:hover {
+    background-color: #2D283E;
+    color:white;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+
+.btn-down span {
+    padding-right: 100px;
+}
+
+/* Style for the circle */
+.btn-down::after {
+    content: "⬇️"; /* Unicode character code for ⬇️ emoji */
+    position: absolute;
+    top: 18.3px;
+    right: 86.8%; /* Shift the circle to the right edge of the button */
+    transform: translateY(-50%);
+    width: 35.5px; /* Adjust the size of the circle */
+    height: 35.5px; /* Adjust the size of the circle */
+    font-size: 20px; /* Adjust the font size to fit the emoji within the circle */
+    background-color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white; /* Color of the emoji */
+    border-color: black;
+}
+
+.btn-down:hover::after {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Add shadow on hover */
+}
+

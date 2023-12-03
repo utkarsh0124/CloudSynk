@@ -1,0 +1,29 @@
+{% load static %}
+{% load crispy_forms_tags %} {% block content %}
+
+<link rel="stylesheet" href="{% static '/css/login.css' %}">
+{{form|crispy}}
+  <!-- Modal Content -->
+  <form class="modal-content animate" action="/auth_login/" method="post" enctype= multipart/form-data>
+    {% csrf_token %}
+    <div class="container">
+      <input type="text" placeholder="Enter Username" name="username">
+      <input type="password" placeholder="Enter Password" name="password">
+      <button type="submit">Login</button>  
+    </div>
+
+    <div class="container" style="background-color:#f1f1f1">
+      <button type="button" onclick="document.getElementById('id01').style.display='none'" class="cancelbtn">Cancel</button>
+      <span class="psw">Forgot <a href="#">password?</a></span>
+    </div>
+  </form>
+  
+  <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
+
+  <form action="/logout/" method="post">
+      {% csrf_token %}
+      <button type="submit" value="Logout">Log Out</button>
+  </form>
+
+
+{% endblock %}

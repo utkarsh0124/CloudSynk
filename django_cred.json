@@ -1,0 +1,14 @@
+{
+    "superuser" : {
+        "superuser" : "_admin",
+        "pass" : "vK^9@k650HgH"
+    },
+
+    "user_db" :{
+        "user_id" : 1,
+        "user_name" : "dev_ut",
+        "pwd" : "root123",
+        "container_name" : "dev_container" 
+    }
+
+}

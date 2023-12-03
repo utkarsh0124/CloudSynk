@@ -1,0 +1,13 @@
+{% extends 'main/base.html' %} {% block title %}Sign Up{% endblock %} 
+{% load crispy_forms_tags %} {% block content %}
+
+<form action="/auth_signup/" method="post" enctype="multipart/form-data">
+  {% csrf_token %}{{form|crispy}}
+  Email: <input type="email" name="email" placeholder="Enter email here..."><br>
+  Username: <input type="text" name="username" placeholder="Enter UserId here..."><br>
+  Password: <input type="password" name="password1" placeholder="Enter password here..."><br>
+  Type Passsword again: <input type="password" name="password2" placeholder="Enter password here..."><br>
+  <button type="submit" value="Submit">Submit</button>
+</form>
+
+{% endblock %}

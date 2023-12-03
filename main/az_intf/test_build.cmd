@@ -1,0 +1,3 @@
+set PYTHONPATH=C:\Users\utkar\Desktop\azure_storage\django_webapp\storage_webapp\main\az_intf
+set AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=infreqstorage;AccountKey=qo28wDprvTo1xuQtd7UcRsMNhb8wsI07pZoSgYIrHCfDYhiwn1Uvxqfq8LPgYjdtqiaN93UXxiLH+AStE1+UyA==;EndpointSuffix=core.windows.net
+python test/unit_test.py

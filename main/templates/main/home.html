@@ -1,0 +1,40 @@
+{% extends 'main/base.html' %} {% block title %}Home Page{% endblock %} 
+{% load static %}
+{% block content %} 
+
+<script src="{% static '/js/home.js' %}"></script>
+
+<div class="card mt-2">
+
+  <div class="card-body d-flex flex-row justify-content-between">
+    <form id="addFile" action="/addFile/" method='post' enctype= multipart/form-data>
+      {% csrf_token %}
+      {% comment %} <input type="file" id="myfile" name="myfile"> {% endcomment %}
+      <input type="text" placeholder="Enter Filename" name="filename">
+      <input type="submit" value="Upload">
+    </form> 
+  </div>
+
+
+  <div class="card-body d-flex flex-row justify-content-between">
+    <div>
+      LISTING BLOBS
+      <ul>
+        {% for blob in blobQuery %}
+          <li>
+            <form action="/deleteFile/" method='get'>
+            {{ blob.blob_name }} 
+            <div>
+              <input type="hidden" value="{{ blob.blob_name }}" name="blob_name"></input>
+              <input type="submit" class="delete-button" value="Delete"></input>
+              {% comment %} <input type="submit" class="delete-button" data-blob-name="{{ blob.blob_name }}">Delete</input> {% endcomment %}
+            </div> 
+          </li>
+        </form>
+        {% endfor %}
+        </ul>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
