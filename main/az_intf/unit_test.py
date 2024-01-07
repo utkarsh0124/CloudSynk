@@ -28,8 +28,8 @@ if __name__ == '__main__':
         print("CREATING CONTAINER")
         ctr.container_create(ctr_id)
         
-        # print("CHECKING CONTAINER EXISTS")
-        # print("container1 exists : ", ctr.container_exists(ctr_id))
+        print("CHECKING CONTAINER EXISTS")
+        print("container1 exists : ", ctr.container_exists(ctr_id))
         # print("container2 exists : ", ctr.container_exists("container2"))
 
         # ctr_list = ctr.get_list()
