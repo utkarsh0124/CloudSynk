@@ -9,7 +9,14 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 
+#############################################
+#   from az_intf.api import Api
+#############################################
+
 # import json
+
+#global api object
+api_obj = None
 
 def user_exists(username):
     try:
@@ -140,6 +147,14 @@ def delete_blob(request):
 def home(request):
     print("\n user : ", request, '\n')
     if request.user.username != 'admin':
+
+        #instantiate Api with user's container ID
+        #########################################################
+        #           This object should be used for all
+        #           tasks related to azure
+        ##########################################################
+        #api_obj = Api()
+        
         #get blob list from az_intf
         user_info = UserInfo.objects.filter(user=request.user).values()
         if user_info.count() != 0:

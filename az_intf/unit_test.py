@@ -10,8 +10,7 @@
 
 
 from db_user import DbUser
-from azure_api import Blob, Container
-from azure_api import Auth
+from api_utils import Auth, Container
 import shared_variable
 
 import os

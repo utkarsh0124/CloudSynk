@@ -1,7 +1,7 @@
 from azure.storage.blob import ContainerClient
 
 import shared_variable
-from . import Blob
+import Blob
 
 import time
 
@@ -79,7 +79,7 @@ class Container:
                 
                 self.__delete_from_db()
 
-                time.sleep(5)
+                time.sleep(2)
                 print("delete_container :: SUCCESS :: ")
             except Exception as error:
                 print("CONTAINER DELETE ERROR : ", error)
