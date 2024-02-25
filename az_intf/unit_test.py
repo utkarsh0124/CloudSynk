@@ -1,5 +1,17 @@
-from main.az_intf.DbUser import DbUser
-from azure_api import azure_auth, blob, container
+#####################################################################
+#                             WARNING!                              #
+#                                                                   #
+#       Run this file only with azure portal opened alongside       #
+#       Create/delete functions call Paid AZURE APIs                # 
+#       call functions before cross checking the portal             #
+#                                                                   #
+#                         CODE SENSIBLY !!!!                        #
+#####################################################################
+
+
+from db_user import DbUser
+from azure_api import Blob, Container
+from azure_api import Auth
 import shared_variable
 
 import os
@@ -10,70 +22,98 @@ def total_api_calls():
     print("=========================")
 
 
+def delete_container(ctr):
+    print("DELETING CONTAINER")
+    ctr.container_delete()
+
+def add_container(ctr):
+    print("CREATING CONTAINER")
+    ctr.container_create()
+
+
+def delete_blob(blob_obj, blob_name):
+    print("DELETING BLOB")
+    blob_obj.blob_delete(blob_name)
+
+def add_blob(blob_obj, blob_path):
+    print("CREATING BLOB")
+    blob_obj.blob_create(blob_path)    
+
+
 if __name__ == '__main__':
-    user_obj = DbUser.User()
+    user_obj = DbUser.DbUser()
     
     print("Authenticating user locally")
     if user_obj.user_auth_local():
         
         print("ESTABLISHING CONNECTION TO AZURE")
-        azure_conn = azure_auth.Azure_auth()
+        azure_conn = Auth.Auth()
         
-        client = azure_conn.azure_auth()
+        client = azure_conn.auth_api()
         print("SUCCESS")
-        
-        ctr = container.Container(client)
-        
-        ctr_id = "container1"
-        print("CREATING CONTAINER")
-        ctr.container_create(ctr_id)
-        
-        print("CHECKING CONTAINER EXISTS")
-        print("container1 exists : ", ctr.container_exists(ctr_id))
-        # print("container2 exists : ", ctr.container_exists("container2"))
 
-        # ctr_list = ctr.get_list()
-        # print(ctr_list)
+        #--------------- CONTAINER ---------------#
+
+        #Do not remove 'admin-container' --> for testing purpose
+        # Container Object
+        ctr_id = "container1"
+        ctr = Container.Container(ctr_id, client)
+
+
+        ###################################################################
+        #   add containers that are already present in azure portal
+        ###################################################################
         
-        # blob = ctr.blob(ctr_id)
+        ctr.container_list.add("admin-container")
+        ctr.container_list.add("container1")
         
-        # blob_path = os.path.join("C:\\Users\\utkar\\Desktop\\azure_storage\\intf")
+        ###################################################################
+
+
+        print(ctr.container_list)
+        add_container(ctr)
+        # delete_container(ctr)
+        print(ctr.container_list)
         
-        # print("CREATING BLOB")
-        # blob.blob_create(blob_path, "blob1.txt")
-        # blob.blob_create(blob_path, "blob2.txt")
-        # blob.blob_create(blob_path, "blob3.txt")
-        # blob.blob_create("blob4.txt")
+        #------------------------------------------#
+
+
+
+        #------------------ BLOB ------------------#
         
-        # blob_list = blob.get_list()
-        # print(blob_list)
+        #Blob Object
+        blob_obj = ctr.blob()
         
-        # print("blob1 Exists : ", blob.blob_exists("blob1.txt"))
-        # print("blob2 Exists : ", blob.blob_exists("blob2.txt"))
+        ##################################################################
+        #   add Blobs that are already present
+        ##################################################################
+        # blob_obj.blob_list.add('blob1.txt')
+        # blob_obj.blob_list.add('blob2.txt')
+        ##################################################################
+
         
-        # print("DOWNLOADING BLOB1 and Blob2")
-        # blob1 = blob.download_blob(blob_path, 'blob1.txt')
-        # blob2 = blob.download_blob(blob_path, 'blob2.txt')
-        # blob2 = blob.download_blob(blob_path, 'blob3.txt')
+        blob_path = os.path.join('/workspace','storageWksp','StorageApp','az_intf')
+        print("Blob Path : ", os.path.join(blob_path,"blob1.txt"))
+        print("Blob Path : ", os.path.join(blob_path,"blob2.txt"))
+        print("Blob list : ", blob_obj.get_list())
         
-        # print(blob1)
-        # print(blob2)
+        add_blob(blob_obj, os.path.join(blob_path,"blob1.txt"))
+        add_blob(blob_obj, os.path.join(blob_path,"blob2.txt"))
         
-        # blob1_file.write(blob1)
-        # blob2_file.write(blob2)
-       
-        # blob1_file.close()
-        # blob2_file.close()
+        print("Blob list : ", blob_obj.get_list())
+
+        # delete_blob(blob_obj, 'blob1.txt')
+        # delete_blob(blob_obj, 'blob2.txt')
         
-        # print("DELETING blob1 and blob2") 
-        # blob.blob_delete("blob1.txt")
-        # blob.blob_delete("blob2.txt")
-        # blob.blob_delete("blob3.txt")
-       
-        # print("DELETING CONTAINER : container1")
-        # ctr.container_delete(ctr_id)  
+        print("DOWNLOADING BLOB1 and Blob2")
+        # blob_path_download = os.path.join('/workspace','storageWksp','StorageApp')
+        # blob1 = blob_obj.download_blob(blob_path_download, 'blob1.txt')
+        # blob2 = blob_obj.download_blob(blob_path_download, 'blob2.txt')
+        
+        print("DELETING CONTAINER : container1")
+        ctr.container_delete()  
 
         total_api_calls()
 
         # del blob
-        # del ctr 
+        # del ctr

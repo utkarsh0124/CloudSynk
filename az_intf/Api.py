@@ -1,6 +1,6 @@
-import azure_api# import azure_auth, blob, container
+import azure_api
 
-class Azure:
+class Api:
     def __init__(self, container=None):
         self.container = container
         self.client = None
@@ -20,4 +20,3 @@ class Azure:
             print("=====================\nFAILED\n==================")
     
     # def create_blob(self):
-        

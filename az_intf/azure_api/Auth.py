@@ -3,7 +3,7 @@ from azure.storage.blob import BlobServiceClient
 
 from shared_variable import increment_api_call_counter
 
-class Azure_auth:
+class Auth:
     def __init__(self, conn_str=None):
         self.conn_str = conn_str
         self.auth = False
@@ -19,7 +19,7 @@ class Azure_auth:
         
         return blob_service_client
         
-    def azure_auth(self): 
+    def auth_api(self): 
         self.conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         
         try:
