@@ -2,5 +2,5 @@ __pycache__
 main/__pycache__
 main/az_intf/__pycache__
 storage_webapp/__pycache__
-storage_webapp/django_cred.json
-storage_webapp/db.sqlite3
+django_cred.json
+db.sqlite3
