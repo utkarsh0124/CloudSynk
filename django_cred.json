@@ -6,8 +6,8 @@
 
     "user_db" :{
         "user_id" : 1,
-        "user_name" : "dev_ut",
-        "pwd" : "root123",
+        "user_name" : "dev",
+        "pwd" : "dev123",
         "container_name" : "dev_container" 
     }
 
