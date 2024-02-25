@@ -1,4 +1,4 @@
-from user import user
+from main.az_intf.DbUser import DbUser
 from azure_api import azure_auth, blob, container
 import shared_variable
 
@@ -11,7 +11,7 @@ def total_api_calls():
 
 
 if __name__ == '__main__':
-    user_obj = user.User()
+    user_obj = DbUser.User()
     
     print("Authenticating user locally")
     if user_obj.user_auth_local():

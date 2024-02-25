@@ -1,4 +1,4 @@
-class User:
+class DbUser:
     def __init__(self, user_id=None, user_pass=None):
         self.user_id = user_id
         self.user_pass = user_pass

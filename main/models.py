@@ -17,4 +17,4 @@ class UserInfo(models.Model):
     container_id = models.CharField(max_length=200)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
     storage_quota_kb = models.IntegerField()
-    total_storage_size_kb = models.IntegerField()
+    storage_size_kb = models.IntegerField()
