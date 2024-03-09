@@ -1,40 +1,59 @@
-from azure.storage.blob import ContainerClient
+# import sys
+# sys.path.append("...")
 
-import shared_variable
-import Blob
+from azure.storage.blob import ContainerClient
+from main.models import UserInfo
+
+# import shared_variable
+from .Blob import Blob
 
 import time
 
 class Container:
-    def __init__(self, container_name:str, blob_service_client=None):
+    def __init__(self, container_name=None, blob_service_client=None):
         self.__container_name = container_name
         self.__blob_service_client = blob_service_client
-        #get container list from local DB
-        #made public for testing purpose. Change to private
-        self.container_list = set()
+        self.__container_list = None
 
+        if self.__container_name != None:
+            self.__container_list = set(UserInfo.objects.values_list('container_id', flat=True))
+
+        print("Container list : ", end=" ")
+        for _ in self.__container_list:
+            print(_, end=' : ')
+        print()
 
     def __container_exists(self):
-        return self.__container_name in self.container_list
+        return self.__container_name in self.__container_list
 
 
-    def __add_to_db(self):
-        #add self.__containainer_name to db
+    def __add_to_db(self, user_obj):
+        new_container = UserInfo()
+
+        new_container.container_id = self.__container_name
+        new_container.user_type = 'REGULAR'
+        
+        #assign storage quota based on user_type
+        #standard user - 5GB, Premium user - 10GB
+        new_container.storage_quota_kb = 4883000 #5GB
+        new_container.total_storage_size_kb = 0 # total storage used
+        new_container.user = user_obj
+
+        new_container.save()
         
         #update container_list
-        self.container_list.add(self.__container_name)
-        pass
+        self.__container_list.add(self.__container_name)
 
 
     def __delete_from_db(self):
-        #delete self.__container_name from db
+        container_instance = UserInfo.objects.get(Container=self.__container_name)
+        container_instance.delete()
 
         #update container_list
-        self.container_list.remove(self.__container_name)
-        pass
+        self.__container_list.remove(self.__container_name)
         
 
-    def container_create(self):
+    def container_create(self, user_obj):
         operation_status = False
         if self.__container_exists():
             print("CONTAINET ALREADY EXISTS")
@@ -43,14 +62,14 @@ class Container:
                 '''
                 Azure API call to create a container
                 '''
-                # Instantiate a ContainerClient
-                container_client = self.__blob_service_client.get_container_client(self.__container_name)
-                container_client.create_container()
+                # # Instantiate a ContainerClient
+                # container_client = self.__blob_service_client.get_container_client(self.__container_name)
+                # container_client.create_container()
                 
-                self.__add_to_db()
+                self.__add_to_db(user_obj)
                 operation_status = True
                 
-                shared_variable.increment_api_call_counter2()
+                #shared_variable.increment_api_call_counter2()
                 print("Container Creating :: SUCCESS")
             
             except Exception as error:
@@ -65,9 +84,9 @@ class Container:
                 '''
                 Azure API call to delete a container
                 '''    
-                # Instantiate a ContainerClient
-                container_client = self.__blob_service_client.get_container_client(self.__container_name)
-                container_client.delete_container()
+                # # Instantiate a ContainerClient
+                # container_client = self.__blob_service_client.get_container_client(self.__container_name)
+                # container_client.delete_container()
                 
                 '''
                 ============================================================
@@ -75,7 +94,7 @@ class Container:
                 ============================================================
                 '''
                 operation_status = 1
-                shared_variable.increment_api_call_counter2()
+                #shared_variable.increment_api_call_counter2()
                 
                 self.__delete_from_db()
 
@@ -97,6 +116,6 @@ class Container:
 
     def blob(self):
         container_client = self.__blob_service_client.get_container_client(self.__container_name)
-        blob_obj = Blob.Blob(container_client, self.__container_name)
-        shared_variable.increment_api_call_counter()
+        blob_obj = Blob(container_client, self.__container_name)
+        #shared_variable.increment_api_call_counter()
         return blob_obj

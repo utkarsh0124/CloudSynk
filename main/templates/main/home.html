@@ -20,12 +20,12 @@
     <div>
       LISTING BLOBS
       <ul>
-        {% for blob in blobQuery %}
+        {% for blob_name in blobQuery %}
           <li>
             <form action="/deleteFile/" method='get'>
-            {{ blob.blob_name }} 
+            {{ blob_name }} 
             <div>
-              <input type="hidden" value="{{ blob.blob_name }}" name="blob_name"></input>
+              <input type="hidden" value="{{ blob_name }}" name="blob_name"></input>
               <input type="submit" class="delete-button" value="Delete"></input>
               {% comment %} <input type="submit" class="delete-button" data-blob-name="{{ blob.blob_name }}">Delete</input> {% endcomment %}
             </div> 

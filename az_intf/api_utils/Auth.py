@@ -1,7 +1,7 @@
 import os
 from azure.storage.blob import BlobServiceClient
 
-from shared_variable import increment_api_call_counter
+#from shared_variable import increment_api_call_counter
 
 class Auth:
     def __init__(self, conn_str=None):
@@ -15,7 +15,7 @@ class Auth:
         ''' 
         blob_service_client = BlobServiceClient.from_connection_string(self.conn_str)
         
-        increment_api_call_counter()
+        # increment_api_call_counter()
         
         return blob_service_client
         
@@ -23,7 +23,7 @@ class Auth:
         self.conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         
         try:
-            self.blob_service_client =  self.__auth_api()
+            self.blob_service_client = self.__auth_api()
             
         except Exception as error:
             print("AZURE AUTHENTICATION ERROR : \n", error)

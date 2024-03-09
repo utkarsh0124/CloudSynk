@@ -135,3 +135,12 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+#global api object
+#########################################################
+#           This object should be used for
+#           all function calls related to azure
+##########################################################
+API_OBJ = None
+BLOB_LIST = None
