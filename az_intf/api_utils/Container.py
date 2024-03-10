@@ -16,7 +16,7 @@ class Container:
         self.__container_list = None
 
         if self.__container_name != None:
-            self.__container_list = set(UserInfo.objects.values_list('container_id', flat=True))
+            self.__container_list = set(UserInfo.objects.values_list('container_name', flat=True))
 
         print("Container list : ", end=" ")
         for _ in self.__container_list:
@@ -30,7 +30,7 @@ class Container:
     def __add_to_db(self, user_obj):
         new_container = UserInfo()
 
-        new_container.container_id = self.__container_name
+        new_container.container_name = self.__container_name
         new_container.user_type = 'REGULAR'
         
         #assign storage quota based on user_type

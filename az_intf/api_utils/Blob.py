@@ -10,46 +10,71 @@ import os
 from datetime import datetime
 
 class Blob:
-    def __init__(self, container_client, container_name):
+    def __init__(self, container_client, container_name:str):
         self.__container_client = container_client
         self.__container_name = container_name
-        self.__blob_list = set([_.blob_name for _ in (blob_table.objects.filter(container_name=self.__container_name))])
+        # dict<str, set()>
+        self.__container_blob_dict = {
+                    self.__container_name : set([_.blob_name for _ in blob_table.objects.filter(container_name=self.__container_name)])
+                }
 
+        
         print("blob list :  ", end="  ")
-        for _ in self.__blob_list:
-            print(_, end=' : ')
-        print()
+        if self.__container_name in self.__container_blob_dict.keys():
+            for _ in self.__container_blob_dict[self.__container_name]:
+                print(_, end=' : ')
+            print()
 
-    def __add_to_db(self, blob_name):
+
+    def __add_to_dict(self, blob_name:str):
+        if not self.blob_exists(blob_name):
+            self.__container_blob_dict[self.__container_name].add(blob_name)
+        else:
+            print("ERROR :: Blob.py :: __add_to_dict() :: Blob Already present Cannot Add to dict")
+
+
+    def __remove_from_dict(self, blob_name:str):
+        if self.blob_exists(blob_name):
+            self.__container_blob_dict[self.__container_name].remove(blob_name)
+        else:
+            print("ERROR :: Blob.py :: __remove_from_dict() :: Blob not present Cannot Delete from Dict")
+
+
+    def __add_to_db(self, blob_name:str):
         new_blob_entry = blob_table()
         
         new_blob_entry.blob_name = blob_name
         new_blob_entry.container_name = self.__container_name
         new_blob_entry.blob_size = 0
         new_blob_entry.blob_update_time = datetime.now()
-
         new_blob_entry.save()
 
-        # update blob_list
-        self.__blob_list.add(blob_name)
+        # udpate dict
+        self.__add_to_dict(blob_name)
 
 
-    def __delete_from_db(self, blob_name):
-        blob_obj = blob_table.objects.get(blob_name=blob_name)        
+    def __delete_from_db(self, blob_name:str):
+        blob_obj = blob_table.objects.get(blob_name=blob_name, container_name=self.__container_name)        
         blob_obj.delete()
 
-        #update blob_list
-        self.__blob_list.remove(blob_name)
+        #update dict
+        self.__remove_from_dict(blob_name)
 
 
     def get_list(self):
-        return list(self.__blob_list)
+        if self.__container_name in self.__container_blob_dict:
+            return list(self.__container_blob_dict[self.__container_name])
+        else:
+            print("\n   [INFO :: Blob.py :: get_list() :: Container not present in Dict]\n")
+            return []
     
-    
-    def blob_exists(self, blob_name):
-        return blob_name in self.__blob_list
-    
-    
+
+    def blob_exists(self, blob_name:str):
+        if self.__container_name in self.__container_blob_dict.keys():
+            return blob_name in self.__container_blob_dict[self.__container_name]
+        else:
+            return False
+
     def blob_create(self, file_path):
         operation_status = 0
         blob_name = file_path.split('/')[-1]
