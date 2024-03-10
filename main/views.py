@@ -106,7 +106,7 @@ def add_blob(request):
     user_info = UserInfo.objects.get(user=request.user)
 
     #get container id from user
-    container_id = user_info.container_id
+    container_name = user_info.container_name
     
     #get blob details from form
     filename = request.POST.get("filename")
@@ -122,7 +122,7 @@ def add_blob(request):
     user_info.total_storage_size_kb += file_size_kb
     
     if API_OBJ == None:
-        API_OBJ = api.Api(user_info.container_id)
+        API_OBJ = api.Api(user_info.container_name)
         API_OBJ.create_blob(filename)
     else:
         print("ERROR : API_OBJ Empty")
@@ -142,7 +142,7 @@ def delete_blob(request):
         
         #delete from Blob DB
         if API_OBJ == None:
-            API_OBJ = api.Api(user_info.container_id)
+            API_OBJ = api.Api(user_info.container_name)
             user_info.total_storage_size_kb -= API_OBJ.get_blob_size(blob_name)
             API_OBJ.delete_blob(blob_name)
        
@@ -160,7 +160,7 @@ def home(request):
         user_info = UserInfo.objects.filter(user=request.user).values()
         
         if API_OBJ == None:
-            API_OBJ = api.Api(user_info[0]['container_id'])
+            API_OBJ = api.Api(user_info[0]['container_name'])
 
         if user_info.count() != 0:
             blob_list = API_OBJ.list_blob()
