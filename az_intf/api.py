@@ -1,8 +1,16 @@
-# from db_user.DbUser import DbUser
 from .api_utils import Container, Auth
 
+# Singleton 
 class Api:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self, container_name):
+        print("\n\n     New API Instance Created \n\n")
         self.__container_name = container_name
         self.__container_obj = None
         self.__blob_obj = None
@@ -48,7 +56,24 @@ class Api:
     def get_blob_size(self, blob_path:str):
         return 0
 
-    
+
     def list_blob(self):
         return self.__container_obj.blob().get_list()
-        
+
+
+# Global variable
+API_INSTANCE = None
+
+def get_api_instance(container_name):
+    global API_INSTANCE
+    if API_INSTANCE == None:
+        API_INSTANCE = Api(container_name)
+    return API_INSTANCE
+
+def del_api_instance():
+    global API_INSTANCE
+    if API_INSTANCE != None:
+        del API_INSTANCE
+        API_INSTANCE=None
+    
+    print("\n\n     Deleting API Instance\n\n")

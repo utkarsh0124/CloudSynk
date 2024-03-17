@@ -7,7 +7,8 @@ from main.models import Blob as blob_table
 
 import uuid
 import os
-from datetime import datetime
+from django.utils import timezone
+
 
 class Blob:
     def __init__(self, container_client, container_name:str):
@@ -46,7 +47,8 @@ class Blob:
         new_blob_entry.blob_name = blob_name
         new_blob_entry.container_name = self.__container_name
         new_blob_entry.blob_size = 0
-        new_blob_entry.blob_update_time = datetime.now()
+        # new_blob_entry.blob_update_time = datetime.now()
+        new_blob_entry.blob_update_time = timezone.now()
         new_blob_entry.save()
 
         # udpate dict

@@ -33,9 +33,6 @@ def user_signup(request):
     return render(request, 'user/signup.html')
 
 def signup_auth(request):
-    # Accessing blobal objects
-    API_OBJ = global_variable_value = settings.API_OBJ
-
     return_str = '<H1>USER SIGNUP COMPLETED </H1>'  
     
     if request.method == 'POST':
@@ -50,13 +47,13 @@ def signup_auth(request):
             return HttpResponse("<h1>Username already exists</h1>")
     
         # User is new. Create new Api object
-        API_OBJ = api.Api(assign_container(username))
+        api_instance = api.get_api_instance(assign_container(username))
 
         user = User.objects.create_user(username=username,password=password1)
         user.save()
     
         # Add a Container for this new User
-        API_OBJ.add_container(user)
+        api_instance.add_container(user)
             
         return redirect(to='/login/')    
     else:
@@ -87,7 +84,7 @@ def login_auth(request):
                 login(request, user)
                 return redirect('/')
             else:
-                #Django failed the authentication
+                #Django authentication failed
                 return HttpResponse("<h1>Incorrect Password</h1>")
         else:
             return HttpResponse("<h1>Invalid Username</h1>")
@@ -96,17 +93,14 @@ def login_auth(request):
 def user_logout(request):
     if request.user.is_authenticated:
         auth.logout(request)
+
+        # delete singleton object allocated for the user 
+        api_instance = api.del_api_instance()
         return HttpResponse("<H1>User logged out</H1>")
     return redirect('/')
 
 def add_blob(request):
-    # Accessing blobal objects
-    API_OBJ = global_variable_value = settings.API_OBJ
-
     user_info = UserInfo.objects.get(user=request.user)
-
-    #get container id from user
-    container_name = user_info.container_name
     
     #get blob details from form
     filename = request.POST.get("filename")
@@ -121,18 +115,12 @@ def add_blob(request):
     #update the total storage for this user in user_info DB
     user_info.total_storage_size_kb += file_size_kb
     
-    if API_OBJ == None:
-        API_OBJ = api.Api(user_info.container_name)
-        API_OBJ.create_blob(filename)
-    else:
-        print("ERROR : API_OBJ Empty")
+    api_instance = api.get_api_instance(user_info.container_name)
+    api_instance.create_blob(filename)
 
     return home(request)
 
 def delete_blob(request):
-    # Accessing blobal objects
-    API_OBJ = global_variable_value = settings.API_OBJ
-
     if request.method == 'GET':
         # blob_name = json.loads(request.GET.get('blob_name'))
         blob_name = request.GET.get('blob_name')
@@ -141,29 +129,23 @@ def delete_blob(request):
         user_info = UserInfo.objects.get(user=request.user)
         
         #delete from Blob DB
-        if API_OBJ == None:
-            API_OBJ = api.Api(user_info.container_name)
-            user_info.total_storage_size_kb -= API_OBJ.get_blob_size(blob_name)
-            API_OBJ.delete_blob(blob_name)
+        api_instance = api.get_api_instance(user_info.container_name)
+        user_info.total_storage_size_kb -= api_instance.get_blob_size(blob_name)
+        api_instance.delete_blob(blob_name)
        
         print("BLOB name : ", blob_name)
     return home(request)
 
 @login_required
-def home(request):
-    # Accessing blobal objects
-    API_OBJ = global_variable_value = settings.API_OBJ
-    
+def home(request):    
     print("\n user : ", request, '\n')
 
     if request.user.username != 'admin':
         user_info = UserInfo.objects.filter(user=request.user).values()
-        
-        if API_OBJ == None:
-            API_OBJ = api.Api(user_info[0]['container_name'])
+        api_instance = api.get_api_instance(user_info[0]['container_name'])
 
         if user_info.count() != 0:
-            blob_list = API_OBJ.list_blob()
+            blob_list = api_instance.list_blob()
 
             # print("Blob List : ")
             # for _blob in blob_list:
