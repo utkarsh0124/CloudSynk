@@ -1,9 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
 
-url_supported = "storage|"
-regex_for_404 = "^(?!(" + url_supported + ")$).*$"
-
 urlpatterns = [
     # path(regex_for_404, "media/error_404/error_404.html"),
     path("", include("main.urls")),

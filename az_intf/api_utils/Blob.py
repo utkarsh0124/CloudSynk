@@ -3,11 +3,12 @@
 
 # import shared_variable
 from azure.storage.blob import BlobBlock
+from django.utils import timezone
 from main.models import Blob as blob_table
+from logger import logger
 
 import uuid
 import os
-from django.utils import timezone
 
 
 class Blob:
@@ -20,25 +21,25 @@ class Blob:
                 }
 
         
-        print("blob list :  ", end="  ")
-        if self.__container_name in self.__container_blob_dict.keys():
-            for _ in self.__container_blob_dict[self.__container_name]:
-                print(_, end=' : ')
-            print()
+        # print("blob list :  ", end="  ")
+        # if self.__container_name in self.__container_blob_dict.keys():
+        #     for _ in self.__container_blob_dict[self.__container_name]:
+        #         print(_, end=' : ')
+        #     print()
 
 
     def __add_to_dict(self, blob_name:str):
         if not self.blob_exists(blob_name):
             self.__container_blob_dict[self.__container_name].add(blob_name)
         else:
-            print("ERROR :: Blob.py :: __add_to_dict() :: Blob Already present Cannot Add to dict")
+            logger.error('BLOB ALREADY PRESENT CANNOT ADD TO DICT')
 
 
     def __remove_from_dict(self, blob_name:str):
         if self.blob_exists(blob_name):
             self.__container_blob_dict[self.__container_name].remove(blob_name)
         else:
-            print("ERROR :: Blob.py :: __remove_from_dict() :: Blob not present Cannot Delete from Dict")
+            logger.error('BLOB NOT PRESENT CANNOT DELETE FROM DICT')
 
 
     def __add_to_db(self, blob_name:str):
@@ -47,7 +48,6 @@ class Blob:
         new_blob_entry.blob_name = blob_name
         new_blob_entry.container_name = self.__container_name
         new_blob_entry.blob_size = 0
-        # new_blob_entry.blob_update_time = datetime.now()
         new_blob_entry.blob_update_time = timezone.now()
         new_blob_entry.save()
 
@@ -67,25 +67,25 @@ class Blob:
         if self.__container_name in self.__container_blob_dict:
             return list(self.__container_blob_dict[self.__container_name])
         else:
-            print("\n   [INFO :: Blob.py :: get_list() :: Container not present in Dict]\n")
-            return []
+            logger.error('CONTAINER NOT PRESENT IN DICT')
     
 
     def blob_exists(self, blob_name:str):
         if self.__container_name in self.__container_blob_dict.keys():
+            logger.info('{} Blob Exist'.format(blob_name))
             return blob_name in self.__container_blob_dict[self.__container_name]
         else:
+            logger.info('BLOB DOES NOT EXIST')
             return False
+
 
     def blob_create(self, file_path):
         operation_status = 0
         blob_name = file_path.split('/')[-1]
         
-        print("Blob Name : ", blob_name)
+        logger.info('CREATING BLOB : {}'.format(blob_name))
         
-        if self.blob_exists(blob_name):
-            print("Blob Already Exists")
-        else:
+        if not self.blob_exists(blob_name):
             try:
                 ''' 
                 Azure API call to create blob
@@ -114,7 +114,7 @@ class Blob:
 
                 #shared_variable.increment_api_call_counter2()
             except Exception as error:
-                print("BLOG CREATE EXCEPTION : ", error)
+                logger.error('BLOB CREATE EXCEPTION')
         return operation_status
     
         
@@ -141,9 +141,10 @@ class Blob:
                 
                 #shared_variable.increment_api_call_counter2()
             except Exception as error:
-                print("BLOB DELETE EXCEPTION : ", error)
+                logger.error('BLOB DELETE EXCEPTION')
         else :
-            print("BLOB not found")
+            logger.error('{} BLOB NOT FOUND '.format(blob_name))
+
         return operation_status
     
     
@@ -169,10 +170,9 @@ class Blob:
 
                 #shared_variable.increment_api_call_counter2()
             except Exception as error:
-                print("BLOB DOWNLOAD EXCEPTION, ", error)
+                logger.error('BLOG DOWNLOAD EXCEPTION')
         else :
-            print("BLOB not found")
-        
+            logger.error('{} BLOB NOT FOUND'.format(blob_name))
         return operation_status
     
     

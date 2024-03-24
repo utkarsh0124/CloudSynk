@@ -6,6 +6,7 @@ from main.models import UserInfo
 
 # import shared_variable
 from .Blob import Blob
+from logger import logger
 
 import time
 
@@ -18,10 +19,11 @@ class Container:
         if self.__container_name != None:
             self.__container_list = set(UserInfo.objects.values_list('container_name', flat=True))
 
-        print("Container list : ", end=" ")
-        for _ in self.__container_list:
-            print(_, end=' : ')
-        print()
+        # print("Container list : ", end=" ")
+        # for _ in self.__container_list:
+        #     print(_, end=' : ')
+        # print()
+
 
     def __container_exists(self):
         return self.__container_name in self.__container_list
@@ -56,7 +58,7 @@ class Container:
     def container_create(self, user_obj):
         operation_status = False
         if self.__container_exists():
-            print("CONTAINET ALREADY EXISTS")
+            logger.info("CONTAINET ALREADY EXISTS")
         else:
             try:
                 '''
@@ -69,11 +71,8 @@ class Container:
                 self.__add_to_db(user_obj)
                 operation_status = True
                 
-                #shared_variable.increment_api_call_counter2()
-                print("Container Creating :: SUCCESS")
-            
             except Exception as error:
-                print("CONTAINER CREATE ERROR : ", error)
+                logger.error("CONTAINER CREATE EXCEPTION")
         return operation_status
         
 
@@ -99,11 +98,11 @@ class Container:
                 self.__delete_from_db()
 
                 time.sleep(2)
-                print("delete_container :: SUCCESS :: ")
+                logger.info("delete_container :: SUCCESS")
             except Exception as error:
-                print("CONTAINER DELETE ERROR : ", error)
+                logger.error("CONTAINER DELETE EXCEPTION")
         else:
-            print("CONTAINER NOT PRESENT")        
+            logger.error("CONTAINER NOT PRESENT")
         return operation_status 
 
     
