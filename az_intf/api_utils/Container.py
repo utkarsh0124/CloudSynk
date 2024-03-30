@@ -6,7 +6,7 @@ from main.models import UserInfo
 
 # import shared_variable
 from .Blob import Blob
-from logger import logger
+from storage_webapp import logger
 
 import time
 
@@ -87,17 +87,19 @@ class Container:
                 # container_client = self.__blob_service_client.get_container_client(self.__container_name)
                 # container_client.delete_container()
                 
-                '''
-                ============================================================
-                Delete Container API takes some time to delete a container
-                ============================================================
-                '''
+                
                 operation_status = 1
                 #shared_variable.increment_api_call_counter2()
                 
                 self.__delete_from_db()
 
+                '''
+                ============================================================
+                Delete Container API takes some time to delete a container
+                ============================================================
+                '''
                 time.sleep(2)
+                
                 logger.info("delete_container :: SUCCESS")
             except Exception as error:
                 logger.error("CONTAINER DELETE EXCEPTION")
