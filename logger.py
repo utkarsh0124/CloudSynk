@@ -1,7 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
-import inspect
+#import inspect
 import sys
 
 class Logger:
@@ -59,19 +59,3 @@ class Logger:
         # caller_frame = inspect.stack()[1]
         # func_name = caller_frame.function
         self.__log(logging.WARNING, message, func_name)
-
-
-
-
-# # Example usage:
-# logger1 = Logger.init_logger()
-# logger1.debug('This is a debug message', __name__)
-
-# logger2 = Logger.init_logger()
-# logger2.debug('This is a debug message', __name__)
-# logger2.info('This is a info message', __name__)
-# logger2.error('This is a error message', __name__)
-# logger2.warning('This is a warning message', __name__)
-
-# if (logger1 != logger2):
-#     print("Logger class is not a singleton")
