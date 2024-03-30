@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from az_intf import api
 from .models import UserInfo
 from az_intf import utils
-from logger import logger
+from storage_webapp import logger
 
 
 

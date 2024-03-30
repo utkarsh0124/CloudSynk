@@ -5,7 +5,7 @@
 from azure.storage.blob import BlobBlock
 from django.utils import timezone
 from main.models import Blob as blob_table
-from logger import logger
+from storage_webapp import logger
 
 import uuid
 import os

@@ -1,5 +1,5 @@
 from .api_utils import Container, Auth
-from logger import logger
+from storage_webapp import logger
 
 
 # Global Definition

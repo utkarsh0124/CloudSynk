@@ -1,6 +1,6 @@
 import os
 from azure.storage.blob import BlobServiceClient
-from logger import logger
+from storage_webapp import logger
 
 
 class Auth:
