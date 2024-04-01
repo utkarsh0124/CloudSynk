@@ -6,9 +6,10 @@ from main.models import UserInfo
 
 # import shared_variable
 from .Blob import Blob
-from storage_webapp import logger
+from storage_webapp import logger, severity
 
 import time
+
 
 class Container:
     def __init__(self, container_name=None, blob_service_client=None):
@@ -19,10 +20,7 @@ class Container:
         if self.__container_name != None:
             self.__container_list = set(UserInfo.objects.values_list('container_name', flat=True))
 
-        # print("Container list : ", end=" ")
-        # for _ in self.__container_list:
-        #     print(_, end=' : ')
-        # print()
+        logger.log(severity['INFO'], "Container Object Created : {}".format(self.__container_name))
 
 
     def __container_exists(self):
@@ -58,21 +56,20 @@ class Container:
     def container_create(self, user_obj):
         operation_status = False
         if self.__container_exists():
-            logger.info("CONTAINET ALREADY EXISTS")
+            logger.log(severity['INFO'], "CONTAINET ALREADY EXISTS")
         else:
             try:
                 '''
                 Azure API call to create a container
                 '''
-                # # Instantiate a ContainerClient
-                # container_client = self.__blob_service_client.get_container_client(self.__container_name)
-                # container_client.create_container()
+                container_client = self.__blob_service_client.get_container_client(self.__container_name)
+                container_client.create_container()
                 
                 self.__add_to_db(user_obj)
                 operation_status = True
                 
             except Exception as error:
-                logger.error("CONTAINER CREATE EXCEPTION")
+                logger.log(severity['ERROR'], "CONTAINER CREATE EXCEPTION : {}".format(error))
         return operation_status
         
 
@@ -82,10 +79,9 @@ class Container:
             try:
                 '''
                 Azure API call to delete a container
-                '''    
-                # # Instantiate a ContainerClient
-                # container_client = self.__blob_service_client.get_container_client(self.__container_name)
-                # container_client.delete_container()
+                '''
+                container_client = self.__blob_service_client.get_container_client(self.__container_name)
+                container_client.delete_container()
                 
                 
                 operation_status = 1
@@ -100,11 +96,11 @@ class Container:
                 '''
                 time.sleep(2)
                 
-                logger.info("delete_container :: SUCCESS")
+                logger.log(severity['INFO'], "delete_container :: SUCCESS")
             except Exception as error:
-                logger.error("CONTAINER DELETE EXCEPTION")
+                logger.log(severity['ERROR'], "CONTAINER DELETE EXCEPTION : {}".format(error))
         else:
-            logger.error("CONTAINER NOT PRESENT")
+            logger.log(severity['ERROR'], "CONTAINER NOT PRESENT")
         return operation_status 
 
     

@@ -1,6 +1,6 @@
 import os
 from azure.storage.blob import BlobServiceClient
-from storage_webapp import logger
+from storage_webapp import logger, severity
 
 
 class Auth:
@@ -25,6 +25,6 @@ class Auth:
         try:
             self.blob_service_client = self.__auth_api()
         except Exception as error:
-            logger.error("AZURE AUTHENTICATION FAILED")
+            logger.log(severity['ERROR'], "AZURE AUTHENTICATION FAILED")
 
         return self.blob_service_client
