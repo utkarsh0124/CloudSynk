@@ -1,5 +1,5 @@
 from .api_utils import Container, Auth
-from storage_webapp import logger
+from storage_webapp import logger, severity
 
 
 # Global Definition
@@ -28,28 +28,28 @@ class ApiUtils:
         if self.__container_obj:
             self.__container_obj.container_create(user_obj)
         else:
-            logger.error('CONTAINER OBJECT IS NONE')
+            logger.log(severity['ERROR'], 'CONTAINER OBJECT IS NONE')
 
         
-    def create_blob(self, blob_path:str):
+    def create_blob(self, uploaded_file, blob_path:str):
         if self.__blob_obj:
-            self.__blob_obj.blob_create(blob_path)
+            self.__blob_obj.blob_create(uploaded_file, blob_path)
         else:
-            logger.error('BLOB OBJECT IS NONE')
+            logger.log(severity['ERROR'], 'BLOB OBJECT IS NONE')
 
 
     def delete_container(self):
         if self.__container_obj:
             self.__container_obj.container_delete()
         else:
-            logger.error('CONTAINER OBJECT IS NONE')
+            logger.log(severity['ERROR'], 'CONTAINER OBJECT IS NONE')
         
 
     def delete_blob(self, blob_path:str):
         if self.__blob_obj:
             self.__blob_obj.blob_delete(blob_path)
         else:
-            logger.error('BLOB OBJECT IS NONE')
+            logger.log(severity['ERROR'], 'BLOB OBJECT IS NONE')
     
 
     def get_blob_size(self, blob_path:str):
@@ -78,4 +78,4 @@ def del_api_instance():
     if API_INSTANCE != None:
         del(API_INSTANCE)
         API_INSTANCE=None
-    logger.info('DELETING API INSTANCE')
+    logger.log(severity['INFO'], 'API INSTANCE DELETED')

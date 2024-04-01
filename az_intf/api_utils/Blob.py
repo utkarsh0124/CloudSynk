@@ -2,10 +2,10 @@
 # sys.path.append("...")
 
 # import shared_variable
-from azure.storage.blob import BlobBlock
+from azure.storage.blob import BlobType
 from django.utils import timezone
 from main.models import Blob as blob_table
-from storage_webapp import logger
+from storage_webapp import logger, severity
 
 import uuid
 import os
@@ -19,27 +19,22 @@ class Blob:
         self.__container_blob_dict = {
                     self.__container_name : set([_.blob_name for _ in blob_table.objects.filter(container_name=self.__container_name)])
                 }
-
         
-        # print("blob list :  ", end="  ")
-        # if self.__container_name in self.__container_blob_dict.keys():
-        #     for _ in self.__container_blob_dict[self.__container_name]:
-        #         print(_, end=' : ')
-        #     print()
+        logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
 
 
     def __add_to_dict(self, blob_name:str):
         if not self.blob_exists(blob_name):
             self.__container_blob_dict[self.__container_name].add(blob_name)
         else:
-            logger.error('BLOB ALREADY PRESENT CANNOT ADD TO DICT')
+            logger.log(severity['ERROR'], 'BLOB ALREADY PRESENT CANNOT ADD TO DICT : {}'.format(blob_name))
 
 
     def __remove_from_dict(self, blob_name:str):
         if self.blob_exists(blob_name):
             self.__container_blob_dict[self.__container_name].remove(blob_name)
         else:
-            logger.error('BLOB NOT PRESENT CANNOT DELETE FROM DICT')
+            logger.log(severity['ERROR'], 'BLOB NOT PRESENT CANNOT DELETE FROM DICT : {}'.format(blob_name))
 
 
     def __add_to_db(self, blob_name:str):
@@ -67,73 +62,62 @@ class Blob:
         if self.__container_name in self.__container_blob_dict:
             return list(self.__container_blob_dict[self.__container_name])
         else:
-            logger.error('CONTAINER NOT PRESENT IN DICT')
+            logger.log(severity['ERROR'], 'CONTAINER NOT PRESENT IN DICT : {}'.format(self))
     
 
     def blob_exists(self, blob_name:str):
         if self.__container_name in self.__container_blob_dict.keys():
-            logger.info('{} Blob Exist'.format(blob_name))
+            logger.log(severity['INFO'], '{} Blob Exist'.format(blob_name))
             return blob_name in self.__container_blob_dict[self.__container_name]
         else:
-            logger.info('BLOB DOES NOT EXIST')
+            logger.log(severity['INFO'], 'BLOB DOES NOT EXIST : {}'.format(blob_name))
             return False
 
 
-    def blob_create(self, file_path):
+    def blob_create(self, uploaded_file, blob_name):
         operation_status = 0
-        blob_name = file_path.split('/')[-1]
+        # blob_name = file_path.split('/')[-1]
         
-        logger.info('CREATING BLOB : {}'.format(blob_name))
+        logger.log(severity['INFO'], 'CREATING BLOB : {}'.format(blob_name))
         
-        if not self.blob_exists(blob_name):
-            try:
-                ''' 
-                Azure API call to create blob
-                '''
-                # # Instantiate a new BlobClient
-                # blob_client = self.__container_client.get_blob_client(blob_name)
-                
-                # #chunk size -> 4mb
-                # chunk_size=4*1024*1024
-                # block_list=[]
-                # with open(file_path, 'rb') as blob_file:
-                #     while True:
-                #         read_data = blob_file.read(chunk_size)
-                #         if not read_data:
-                #             break # done
-                #         blk_id = str(uuid.uuid4())
-                #         blob_client.stage_block(block_id=blk_id,data=read_data) 
-                #         block_list.append(BlobBlock(block_id=blk_id))
-                        
-                # # Upload the whole chunk to azure storage and make up one blob
-                # blob_client.commit_block_list(block_list)
+        if self.blob_exists(blob_name):
+            logger.log(severity['ERROR'], 'BLOB ALREADY EXISTS: {}'.format(blob_name))
+            return operation_status
 
-                #update db
-                self.__add_to_db(blob_name)
-                operation_status = 1
+        try:
+            ''' 
+            Azure API call to create blob
+            '''
+            # Instantiate a new BlobClient
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            for chunk in uploaded_file.chunks():
+                blob_client.upload_blob(chunk, blob_type=BlobType.BlockBlob)
 
-                #shared_variable.increment_api_call_counter2()
-            except Exception as error:
-                logger.error('BLOB CREATE EXCEPTION')
+            #update db
+            self.__add_to_db(blob_name)
+            operation_status = 1
+
+            #shared_variable.increment_api_call_counter2()
+        except Exception as error:
+            logger.log(severity['ERROR'], 'BLOB CREATE EXCEPTION: {}'.format(error))
+
         return operation_status
     
         
     def blob_delete(self, blob_name):
         operation_status = 0
         
-        # FOR TESTING PURPOSE ONLY
-        # REMOVE THIS
-        
         if self.blob_exists(blob_name):
             try:
                 ''' 
                 # Azure API call to delete blob
                 # ''' 
-                # # Instantiate a new BlobClient
-                # blob_client = self.__container_client.get_blob_client(blob_name)
+                # Instantiate a new BlobClient
+                blob_client = self.__container_client.get_blob_client(blob_name)
                 
-                # # Delete content to blob
-                # blob_client.delete_blob()
+                # Delete content to blob
+                blob_client.delete_blob()
                 
                 #update blob DB
                 self.__delete_from_db(blob_name)
@@ -141,9 +125,9 @@ class Blob:
                 
                 #shared_variable.increment_api_call_counter2()
             except Exception as error:
-                logger.error('BLOB DELETE EXCEPTION')
+                logger.log(severity['ERROR'], 'BLOB DELETE EXCEPTION: {}'.format(error))
         else :
-            logger.error('{} BLOB NOT FOUND '.format(blob_name))
+            logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
 
         return operation_status
     
@@ -170,9 +154,9 @@ class Blob:
 
                 #shared_variable.increment_api_call_counter2()
             except Exception as error:
-                logger.error('BLOG DOWNLOAD EXCEPTION')
+                logger.log(severity['ERROR'], 'BLOB DOWNLOAD EXCEPTION : {}'.format(blob_name))
         else :
-            logger.error('{} BLOB NOT FOUND'.format(blob_name))
+            logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
         return operation_status
     
     

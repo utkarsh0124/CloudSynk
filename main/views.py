@@ -8,17 +8,17 @@ from django.contrib.auth.models import User
 from az_intf import api
 from .models import UserInfo
 from az_intf import utils
-from storage_webapp import logger
 
+from storage_webapp import logger, severity
 
 
 def user_signup(request):
-    logger.info('SIGNUP')
+    logger.log(severity['INFO'], 'SIGNUP')
     return render(request, 'user/signup.html')
 
 
 def signup_auth(request):
-    logger.info('SIGNUP AUTH')
+    logger.log(severity['INFO'], 'SIGNUP AUTH')
     return_str = '<H1>USER SIGNUP COMPLETED </H1>'  
     
     if request.method == 'POST':
@@ -51,7 +51,7 @@ def user_login(request):
 
 
 def login_auth(request):
-    logger.info('LOGIN AUTH')
+    logger.log(severity['INFO'], 'LOGIN AUTH')
     return_str = '<H1>LOGIN FAILED PLEASE RELOAD AND TRY AGAIN</H1>'
     
     if request.user.is_authenticated:
@@ -61,7 +61,9 @@ def login_auth(request):
     if request.method == 'POST':
         username = request.POST.get("username")
         password = request.POST.get("password")
-        
+
+        logger.log(severity['INFO'], 'USER:{} '.format(username))
+
         if not utils.username_valid(username):
             return HttpResponse("<h1>Username Not Found</h1>")
         
@@ -80,9 +82,10 @@ def login_auth(request):
 
 
 def user_logout(request):
-    logger.info('LOGOUT')
+    logger.log(severity['INFO'], 'LOGOUT USER {}'.format(request.user.username))
     if request.user.is_authenticated:
         auth.logout(request)
+
         # delete singleton object allocated for the user 
         api.del_api_instance()
         return HttpResponse("<H1>User logged out</H1>")
@@ -90,12 +93,14 @@ def user_logout(request):
 
 
 def add_blob(request):
-    logger.info('ADD BLOB')
+    logger.log(severity['INFO'], 'ADD BLOB')
     user_info = UserInfo.objects.get(user=request.user)
     
     #get blob details from form
-    filename = request.POST.get("filename")
-    print("\nAdding : ", filename, "\n")
+    uploaded_file = request.FILES['blob_file']
+    
+    filename = uploaded_file.name
+    logger.log(severity['INFO'], 'BLOB NAME {}'.format(filename))
 
     #get size of file to be uploaded
     file_size_kb = 100
@@ -108,16 +113,16 @@ def add_blob(request):
     user_info.total_storage_size_kb += file_size_kb
     
     api_instance = api.get_api_instance(user_info.container_name)
-    api_instance.create_blob(filename)
+    api_instance.create_blob(uploaded_file, filename)
     
     return home(request)
 
 
 def delete_blob(request):
-    logger.info('DELETE BLOB')
+    logger.log(severity['INFO'], 'DELETE BLOB')
     if request.method == 'GET':
-        # blob_name = json.loads(request.GET.get('blob_name'))
         blob_name = request.GET.get('blob_name')
+        logger.log(severity['INFO'], 'BLOB NAME : {}'.format(blob_name))
         
         #update total size in User Info DB
         user_info = UserInfo.objects.get(user=request.user)
@@ -131,8 +136,7 @@ def delete_blob(request):
 
 @login_required
 def home(request):
-    print('\n File name : ', '\n')
-    logger.info('HOME')
+    logger.log(severity['INFO'], 'HOME')
 
     if request.user.username != 'admin':
         user_info = UserInfo.objects.filter(user=request.user).values()
@@ -140,10 +144,6 @@ def home(request):
 
         if user_info.count() != 0:
             blob_list = api_instance.list_blob()
-        
-            # print("Blob List : ")
-            # for _blob in blob_list:
-            #     print(_blob.blob_name)
                 
             return render(request, 'main/home.html', {'blobQuery' : blob_list})
         else:

@@ -9,9 +9,10 @@
   <div class="card-body d-flex flex-row justify-content-between">
     <form id="addFile" action="/addFile/" method='post' enctype= multipart/form-data>
       {% csrf_token %}
-      {% comment %} <input type="file" id="myfile" name="myfile"> {% endcomment %}
-      <input type="text" placeholder="Enter Filename" name="filename">
+      
+      <input type="file" id="blob" name="blob_file">
       <input type="submit" value="Upload">
+      
     </form> 
   </div>
 
