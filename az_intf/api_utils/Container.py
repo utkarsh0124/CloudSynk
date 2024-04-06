@@ -1,8 +1,7 @@
-# import sys
-# sys.path.append("...")
-
 from azure.storage.blob import ContainerClient
 from main.models import UserInfo
+
+from django.contrib.auth.models import User
 
 # import shared_variable
 from .Blob import Blob
@@ -46,7 +45,11 @@ class Container:
 
 
     def __delete_from_db(self):
-        container_instance = UserInfo.objects.get(Container=self.__container_name)
+        container_instance = UserInfo.objects.get(container_name=self.__container_name)
+        
+        #delete user
+        container_instance.user.delete()
+    
         container_instance.delete()
 
         #update container_list
@@ -87,6 +90,11 @@ class Container:
                 operation_status = 1
                 #shared_variable.increment_api_call_counter2()
                 
+                # delete blob entries from DB
+                blob_instance = self.blob()
+                blob_instance.delete_all()
+
+                # Delete container from DB
                 self.__delete_from_db()
 
                 '''

@@ -1,7 +1,3 @@
-# import sys
-# sys.path.append("...")
-
-# import shared_variable
 from azure.storage.blob import BlobType
 from django.utils import timezone
 from main.models import Blob as blob_table
@@ -56,6 +52,7 @@ class Blob:
 
         #update dict
         self.__remove_from_dict(blob_name)
+        logger.log(severity['INFO'], 'BLOB DELETED : {}'.format(blob_name))
 
 
     def get_list(self):
@@ -76,7 +73,6 @@ class Blob:
 
     def blob_create(self, uploaded_file, blob_name):
         operation_status = 0
-        # blob_name = file_path.split('/')[-1]
         
         logger.log(severity['INFO'], 'CREATING BLOB : {}'.format(blob_name))
         
@@ -161,7 +157,10 @@ class Blob:
     
     
     def delete_all(self):
-        ''' 
-        AZURE API call to delete all blobs
-        '''
-        pass
+        blob_list = self.__container_blob_dict[self.__container_name]
+        for blob_name in blob_list:
+            blob_obj = blob_table.objects.get(blob_name=blob_name, container_name=self.__container_name)        
+            blob_obj.delete()
+        
+        del self.__container_blob_dict[self.__container_name]
+        logger.log(severity['INFO'], 'ALL BLOBS DELETED')
