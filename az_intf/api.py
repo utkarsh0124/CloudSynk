@@ -64,7 +64,6 @@ def get_api_instance(container_name:str):
     global API_INSTANCE
     if API_INSTANCE == None:
         API_INSTANCE = ApiUtils(container_name)
-
     # global API_LOG_INSTANCE
     # if API_LOG_INSTANCE == None:
     #     API_LOG_INSTANCE = logger.get_api_log_instance()

@@ -5,7 +5,6 @@ from django.core.exceptions import ValidationError
 def assign_container(username):
     # Logic to create new Container name for a New User
     container_name = username + "-container"
-    print("NEW Container Name : ", container_name)
     return container_name
 
 

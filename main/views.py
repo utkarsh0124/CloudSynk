@@ -12,6 +12,23 @@ from az_intf import utils
 from storage_webapp import logger, severity
 
 
+@login_required
+def remove_user(request):
+    usr_obj = request.user
+    auth.logout(request)
+    
+    user_info = UserInfo.objects.get(user=usr_obj)
+
+    api_instance = api.get_api_instance(user_info.container_name)
+    # delete container handles deleting user
+    api_instance.delete_container()
+
+    api.del_api_instance()
+
+    ret_str = "<h1>User Removed</h1>"
+    return HttpResponse(ret_str)
+
+
 def user_signup(request):
     logger.log(severity['INFO'], 'SIGNUP')
     return render(request, 'user/signup.html')
@@ -81,6 +98,7 @@ def login_auth(request):
     return HttpResponse(return_str)
 
 
+@login_required
 def user_logout(request):
     logger.log(severity['INFO'], 'LOGOUT USER {}'.format(request.user.username))
     if request.user.is_authenticated:
@@ -92,6 +110,7 @@ def user_logout(request):
     return redirect('/')
 
 
+@login_required
 def add_blob(request):
     logger.log(severity['INFO'], 'ADD BLOB')
     user_info = UserInfo.objects.get(user=request.user)
@@ -118,6 +137,7 @@ def add_blob(request):
     return home(request)
 
 
+@login_required
 def delete_blob(request):
     logger.log(severity['INFO'], 'DELETE BLOB')
     if request.method == 'GET':
