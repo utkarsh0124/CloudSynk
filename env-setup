@@ -4,6 +4,10 @@ BASE_DIR=${PWD}/
 if [ -f "python_version.tmp" ]; then
 	rm -rf python_version.tmp
 fi
+
+python3 -m venv .storage-env
+source .storage-env/bin/activate
+
 python3 --version > python_version.tmp
 
 echo "Python version Checked"
