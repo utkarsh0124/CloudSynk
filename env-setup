@@ -1,6 +1,9 @@
 BASE_DIR=${PWD}/
 #PYTHON_VERSION="Python 3.*"
 
+source ../.bashrc
+source ../az_intf
+
 if [ -f "python_version.tmp" ]; then
 	rm -rf python_version.tmp
 fi

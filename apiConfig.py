@@ -1,0 +1,1 @@
+AZURE_API_DISABLE=True

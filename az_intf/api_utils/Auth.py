@@ -24,7 +24,8 @@ class Auth:
         
         try:
             self.blob_service_client = self.__auth_api()
+            logger.log(severity['INFO'], "AZURE AUTHENTICATION SUCCESSFUL")
         except Exception as error:
             logger.log(severity['ERROR'], "AZURE AUTHENTICATION FAILED")
-
+        
         return self.blob_service_client

@@ -1,0 +1,249 @@
+{% load static %}
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>My Web Page</title>
+        <link rel="stylesheet" href="{% static 'css/output.css' %}">
+
+        <script src="{% static 'js/index2.js' %}"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    </head>
+    <body class="font-comfortaa bg-light-blue">
+        <div id="blur_id" class="backdrop-blur-md">
+        <!-- SIDEBAR FULL -->
+        <div class="sidebar-full ">
+            
+            <div class="sidebar-full-logo">
+                <svg data-name="Layer 1" viewBox="0 0 24 24" width="64px" height="56px" xmlns="http://www.w3.org/2000/svg"><path d="M20.52,3.87A5,5,0,0,0,11.44,4H7A3,3,0,0,0,4,7v4a1,1,0,0,0,2,0V7A1,1,0,0,1,7,6H9.78A3,3,0,0,0,9,8a3,3,0,0,0,3,3h7.33a3.66,3.66,0,0,0,1.19-7.13ZM19.33,9H12a1,1,0,0,1,0-2,1,1,0,0,0,1-1,3,3,0,0,1,5.84-1,1,1,0,0,0,.78.67A1.65,1.65,0,0,1,21,7.33,1.67,1.67,0,0,1,19.33,9ZM19,13a1,1,0,0,0-1,1v3a1,1,0,0,1-1,1H14.74a3.66,3.66,0,0,0-2.22-2.13,5,5,0,0,0-9.45,1.28A3,3,0,0,0,4,23h7.33a3.66,3.66,0,0,0,3.6-3H17a3,3,0,0,0,3-3V14A1,1,0,0,0,19,13Zm-7.67,8H4a1,1,0,0,1,0-2,1,1,0,0,0,1-1,3,3,0,0,1,5.84-1,1,1,0,0,0,.78.67A1.65,1.65,0,0,1,13,19.33,1.67,1.67,0,0,1,11.33,21Z" fill="#6563ff"/></svg>    
+            </div>
+
+            <div class="sidebar-full-card">
+                <div class="sidebar-full-card-user-icon">
+                    
+                </div>
+                <div class="sidebar-full-card-user-subscription">
+
+                </div>
+                <div class="sidebar-full-card-user-name">
+
+                </div>
+                <div class="sidebar-full-card-user-storage-progress-bar">
+                    
+                </div>
+                <div class="sidebar-full-card-user-storage-progress-text">
+                    100 %
+                </div>
+            </div>
+            
+            <div class="sidebar-full-container">
+                <!-- Upload Button -->
+                <input type="file" id="file-input" class="hidden" />
+                <label class="sidebar-full-btn bg-indigo-300" for="file-input" id="zip-upload">
+                    <div class="sidebar-full-btn-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 512" class="w-7 h-7" >
+                            <path d="M256 0c70.426 0 134.432 28.793 180.819 75.181C483.207 121.568 512 185.574 512 256c0 70.419-28.793 134.432-75.181 180.819C390.432 483.207 326.426 512 256 512c-70.419 0-134.432-28.793-180.819-75.181C28.793 390.432 0 326.419 0 256c0-70.419 28.793-134.432 75.181-180.819C121.568 28.793 185.581 0 256 0zm-49.948 211.203c-3.827-.162-6.548-1.438-8.119-3.824-4.264-6.39 1.557-12.704 5.588-17.148 11.459-12.566 39.518-42.773 45.172-49.427 4.281-4.731 10.383-4.731 14.661 0 5.841 6.823 35.318 38.408 46.205 50.629 3.776 4.253 8.45 10.057 4.514 15.946-1.607 2.386-4.294 3.662-8.125 3.824h-23.25v57.461c0 6.135-5.032 11.175-11.171 11.175H240.48c-6.139 0-11.171-5.029-11.171-11.175v-57.461h-23.257zm-70.267 58.286c-1.279-5.282.877-9.431 4.319-11.892a12.073 12.073 0 014.139-1.878 12.086 12.086 0 014.524-.23c4.193.602 8.014 3.306 9.304 8.606a330.17 330.17 0 012.223 9.852l1.756 8.656c2.295 11.581 3.997 18.847 8.275 22.465 4.521 3.828 13.087 5.151 29.5 5.151h115.284c15.148 0 23.057-1.452 27.212-5.209 4.007-3.621 5.578-10.707 7.612-21.581l.111-.561c1.066-5.74 2.237-11.943 3.889-18.773 1.289-5.296 5.107-8.004 9.303-8.606a12.099 12.099 0 014.525.23c1.472.355 2.897.995 4.138 1.878 3.442 2.45 5.598 6.6 4.319 11.889-1.506 6.227-2.663 12.403-3.723 18.075l-.061.329c-2.971 15.888-5.438 26.816-13.614 34.498-8.096 7.608-20.78 10.83-43.711 10.83H199.825c-23.98 0-37.162-2.887-45.639-10.396-8.691-7.7-11.324-18.871-14.678-35.816l-1.78-8.839a299.05 299.05 0 00-1.943-8.678zM256 24.604c127.271 0 231.396 104.125 231.396 231.396 0 127.271-104.125 231.396-231.396 231.396-127.267 0-231.396-104.125-231.396-231.396C24.604 128.729 128.733 24.604 256 24.604z"/>
+                        </svg>
+                    </div>
+                    <button type="submit" class="sidebar-full-btn-name" id="upload-button">Upload</button>
+                </label>
+                
+                <div class="sidebar-full-btn">
+                    <div class="sidebar-full-btn-icon">
+                        <svg width="26" height="26" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-7 h-7">
+                            <path d="M2.625 14L13.0713 3.55251C13.5847 3.04034 14.4153 3.04034 14.9275 3.55251L25.375 14M5.25 11.375V23.1875C5.25 23.912 5.838 24.5 6.5625 24.5H11.375V18.8125C11.375 18.088 11.963 17.5 12.6875 17.5H15.3125C16.037 17.5 16.625 18.088 16.625 18.8125V24.5H21.4375C22.162 24.5 22.75 23.912 22.75 23.1875V11.375M9.625 24.5H19.25" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <button class="sidebar-full-btn-name">Home</button>
+                </div>
+
+                <div class="sidebar-full-btn">
+                    <div class="sidebar-full-btn-icon">
+                        <svg width="26" height="26" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-7 h-7">
+                            <path d="M17.5 10.5H21.875M17.5 14H21.875M17.5 17.5H21.875M5.25 22.75H22.75C23.4462 22.75 24.1139 22.4734 24.6062 21.9812C25.0984 21.4889 25.375 20.8212 25.375 20.125V7.875C25.375 7.17881 25.0984 6.51113 24.6062 6.01884C24.1139 5.52656 23.4462 5.25 22.75 5.25H5.25C4.55381 5.25 3.88613 5.52656 3.39384 6.01884C2.90156 6.51113 2.625 7.17881 2.625 7.875V20.125C2.625 20.8212 2.90156 21.4889 3.39384 21.9812C3.88613 22.4734 4.55381 22.75 5.25 22.75ZM12.25 10.9375C12.25 11.2248 12.1934 11.5092 12.0835 11.7746C11.9736 12.04 11.8124 12.2812 11.6093 12.4843C11.4062 12.6874 11.165 12.8486 10.8996 12.9585C10.6342 13.0684 10.3498 13.125 10.0625 13.125C9.77523 13.125 9.49078 13.0684 9.22538 12.9585C8.95998 12.8486 8.71883 12.6874 8.5157 12.4843C8.31258 12.2812 8.15145 12.04 8.04151 11.7746C7.93158 11.5092 7.875 11.2248 7.875 10.9375C7.875 10.3573 8.10547 9.80094 8.5157 9.3907C8.92594 8.98047 9.48234 8.75 10.0625 8.75C10.6427 8.75 11.1991 8.98047 11.6093 9.3907C12.0195 9.80094 12.25 10.3573 12.25 10.9375ZM13.7597 18.3295C12.6214 18.9358 11.3511 19.252 10.0613 19.25C8.7724 19.2516 7.50295 18.9354 6.36533 18.3295C6.64333 17.5726 7.14693 16.9193 7.80811 16.4578C8.46929 15.9963 9.25618 15.7488 10.0625 15.7488C10.8688 15.7488 11.6557 15.9963 12.3169 16.4578C12.9781 16.9193 13.4817 17.5726 13.7597 18.3295Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <button class="sidebar-full-btn-name">About</button>
+                </div>
+
+                <div class="sidebar-full-btn">
+                    <div class="sidebar-full-btn-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="26" height ="26" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-7 h-7">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                    </div>
+                    <button class="sidebar-full-btn-name">Downloads</button>
+                </div>
+
+
+            </div>
+        </div>
+        <div class="sidebar-full-divider"></div>
+
+        <!-- SIDEBAR MOBILE --> 
+        <nav class="sidebar-mobile">
+            <ul class="mt-4">
+                <li>
+                    <div class="m-2 mt-8 h-20 w-20 rounded-3xl bg-white"></div>
+                </li>
+                <li>
+                    <div class="w-18 m-2 h-6 rounded-xl bg-white"></div>
+                </li>
+                <li>
+                    <div class="m-2 mb-12 ml-10 h-3 w-10 rounded-lg bg-gray-600"></div>
+                </li>
+                <li>
+                    <div class="m-7 h-10 w-10 rounded-xl bg-white px-1.5 py-1.5 hover:rounded-3xl">
+                        <!-- <form action="upload/" enctype="multipart/form-data">
+                            <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 512">
+                                <path d="M256 0c140.803 0 256 115.197 256 256S396.803 512 256 512 0 396.803 0 256 115.197 0 256 0zm-55.259 206.44c-4.234-.179-7.244-1.591-8.982-4.231-4.717-7.068 1.723-14.055 6.182-18.971 12.677-13.901 43.719-47.321 49.976-54.682 4.736-5.234 11.486-5.234 16.219 0 6.462 7.548 39.073 42.492 51.118 56.011 4.178 4.707 9.349 11.128 4.994 17.642-1.778 2.64-4.751 4.052-8.989 4.231h-25.722v63.571c0 6.788-5.568 12.363-12.359 12.363H238.83c-6.792 0-12.359-5.564-12.359-12.363V206.44h-25.73zm-77.738 64.484c-1.415-5.844.97-10.435 4.778-13.156a13.335 13.335 0 014.579-2.078 13.35 13.35 0 015.006-.255c4.638.666 8.866 3.658 10.292 9.521a362.877 362.877 0 012.46 10.899l1.943 9.577c2.539 12.813 4.422 20.851 9.154 24.853 5.002 4.235 14.479 5.699 32.637 5.699h127.542c16.758 0 25.508-1.606 30.106-5.762 4.433-4.006 6.17-11.846 8.42-23.876l.124-.622c1.179-6.35 2.474-13.212 4.302-20.768 1.426-5.859 5.65-8.855 10.292-9.521a13.359 13.359 0 015.006.255c1.629.393 3.205 1.1 4.579 2.078 3.808 2.71 6.193 7.301 4.777 13.152-1.666 6.889-2.946 13.722-4.118 19.998l-.068.363c-3.287 17.578-6.016 29.668-15.062 38.167-8.956 8.416-22.988 11.981-48.358 11.981H193.852c-26.53 0-41.113-3.194-50.492-11.502-9.615-8.518-12.528-20.877-16.238-39.624l-1.969-9.779a331.185 331.185 0 00-2.15-9.6z"/>
+                            </svg>
+                            <input type="file" id="file-input" class="hidden"/>
+                            <label class="sidebar-full-btn-name" for="file-input" class="file-label"></label>
+                        </form> -->
+                    </div>
+                </li>
+                <li>
+                    <div class="m-7 h-10 w-10 rounded-xl bg-white px-1.5 py-1.5 hover:rounded-3xl">
+                        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2.625 14.0001L13.0713 3.55258C13.5847 3.04042 14.4153 3.04042 14.9275 3.55258L25.375 14.0001M5.25 11.3751V23.1876C5.25 23.9121 5.838 24.5001 6.5625 24.5001H11.375V18.8126C11.375 18.0881 11.963 17.5001 12.6875 17.5001H15.3125C16.037 17.5001 16.625 18.0881 16.625 18.8126V24.5001H21.4375C22.162 24.5001 22.75 23.9121 22.75 23.1876V11.3751M9.625 24.5001H19.25" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                </li>
+                <li>
+                    <div class="m-7 h-10 w-10 rounded-xl bg-white px-1.5 py-1.5 hover:rounded-3xl">
+                        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M17.5 10.5H21.875M17.5 14H21.875M17.5 17.5H21.875M5.25 22.75H22.75C23.4462 22.75 24.1139 22.4734 24.6062 21.9812C25.0984 21.4889 25.375 20.8212 25.375 20.125V7.875C25.375 7.17881 25.0984 6.51113 24.6062 6.01884C24.1139 5.52656 23.4462 5.25 22.75 5.25H5.25C4.55381 5.25 3.88613 5.52656 3.39384 6.01884C2.90156 6.51113 2.625 7.17881 2.625 7.875V20.125C2.625 20.8212 2.90156 21.4889 3.39384 21.9812C3.88613 22.4734 4.55381 22.75 5.25 22.75ZM12.25 10.9375C12.25 11.2248 12.1934 11.5092 12.0835 11.7746C11.9736 12.04 11.8124 12.2812 11.6093 12.4843C11.4062 12.6874 11.165 12.8486 10.8996 12.9585C10.6342 13.0684 10.3498 13.125 10.0625 13.125C9.77523 13.125 9.49078 13.0684 9.22538 12.9585C8.95998 12.8486 8.71883 12.6874 8.5157 12.4843C8.31258 12.2812 8.15145 12.04 8.04151 11.7746C7.93158 11.5092 7.875 11.2248 7.875 10.9375C7.875 10.3573 8.10547 9.80094 8.5157 9.3907C8.92594 8.98047 9.48234 8.75 10.0625 8.75C10.6427 8.75 11.1991 8.98047 11.6093 9.3907C12.0195 9.80094 12.25 10.3573 12.25 10.9375ZM13.7597 18.3295C12.6214 18.9358 11.3511 19.252 10.0613 19.25C8.7724 19.2516 7.50295 18.9354 6.36533 18.3295C6.64333 17.5726 7.14693 16.9193 7.80811 16.4578C8.46929 15.9963 9.25618 15.7488 10.0625 15.7488C10.8688 15.7488 11.6557 15.9963 12.3169 16.4578C12.9781 16.9193 13.4817 17.5726 13.7597 18.3295Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                </li>
+                <li>
+                    <div class="m-7 h-10 w-10 rounded-xl bg-white px-1.5 py-1.5 hover:rounded-3xl">
+                        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3.5 19.25V21.875C3.5 22.5712 3.77656 23.2389 4.26884 23.7312C4.76113 24.2234 5.42881 24.5 6.125 24.5H21.875C22.5712 24.5 23.2389 24.2234 23.7312 23.7312C24.2234 23.2389 24.5 22.5712 24.5 21.875V19.25M19.25 14L14 19.25M14 19.25L8.75 14M14 19.25V3.5" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                </li>
+            </ul>
+        </nav>
+
+        
+        <!--   TOP NAV FULL -->
+        <nav class="top-nav-full">
+            <div class="top-nav-full-grid">
+                <div class="top-nav-full-search-span">
+                    <div class="top-nav-full-search-grid">
+                        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="m-4 sm:col-span-1">
+                            <path d="M24.5 24.5L18.4368 18.4368M18.4368 18.4368C20.0778 16.7958 20.9997 14.5701 20.9997 12.2494C20.9997 9.92868 20.0778 7.703 18.4368 6.062C16.7958 4.42099 14.5701 3.49908 12.2494 3.49908C9.92868 3.49908 7.703 4.42099 6.062 6.062C4.42099 7.703 3.49908 9.92868 3.49908 12.2494C3.49908 14.5701 4.42099 16.7958 6.062 18.4368C7.703 20.0778 9.92868 20.9997 12.2494 20.9997C14.5701 20.9997 16.7958 20.0778 18.4368 18.4368Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <input type="text" placeholder="    search" class="top-nav-full-search-bar" />
+                        <button class="top-nav-full-search-button">Find</button>
+                        <!-- <button class="top-nav-full-upload-button">Upload</button> -->
+                    </div>
+                </div>
+            
+                <div class="top-nav-full-toggle-span" >
+                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="m-3 ml-auto cursor-pointer">
+                        <path d="M5.625 10.125H30.375M5.625 18H30.375M5.625 25.875H30.375" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="top-nav-full-toggle-div hidden">
+                    <form id="logoutForm" action="logout/" method="POST">
+                        {% csrf_token %}
+                        <button class="top-nav-full-toggle-div-ctr hidden">
+                            Logout
+                        </button>
+                        <input type="hidden" name="param" value="example"> <!-- Hidden input for the URL parameter -->
+                    </form>
+                </div>
+            </div>
+        </nav>
+
+        <!--   TOP NAV MOBILE   -->
+        <nav class="top-nav-mobile">
+            <div class="top-nav-mobile-grid">
+                <div class="top-nav-mobile-search-span">
+                    <div class="top-nav-mobile-search-grid">
+                        <div class="top-nav-mobile-sidebar-toggle">
+                            <svg id="side-nav-toggle-svg" width="38" height="38" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" class="col-span-1 m-4">
+                                <path d="M14.875 17.5L18.375 14M18.375 14L14.875 10.5M18.375 14H9.625M24.5 14C24.5 15.3789 24.2284 16.7443 23.7007 18.0182C23.1731 19.2921 22.3996 20.4496 21.4246 21.4246C20.4496 22.3996 19.2921 23.1731 18.0182 23.7007C16.7443 24.2284 15.3789 24.5 14 24.5C12.6211 24.5 11.2557 24.2284 9.98182 23.7007C8.70791 23.1731 7.55039 22.3996 6.57538 21.4246C5.60036 20.4496 4.82694 19.2921 4.29926 18.0182C3.77159 16.7443 3.5 15.3789 3.5 14C3.5 11.2152 4.60625 8.54451 6.57538 6.57538C8.54451 4.60625 11.2152 3.5 14 3.5C16.7848 3.5 19.4555 4.60625 21.4246 6.57538C23.3938 8.54451 24.5 11.2152 24.5 14Z" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </div>
+                        <input type="text" placeholder=" search" class="top-nav-mobile-search-bar" />
+                        <button class="top-nav-mobile-search-button">Find</button>
+                    </div>
+                </div>
+                <div class="top-nav-mobile-toggle-span">
+                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" class="m-3 ml-auto">
+                        <path d="M5.625 10.125H30.375M5.625 18H30.375M5.625 25.875H30.375" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+            </div>
+        </nav>
+
+
+        <!-- MAIN SCROLLABLE AREA -->         
+        <div class="flex h-full items-center justify-center pt-8 ">
+            <div class="h-[calc(100vh-220px)] mt-8 w-4/6 ml-80 overflow-y-auto rounded-lg bg-white p-2 shadow-md hidden sm:block">
+                {% for blobName in blobQuery %}
+                <button class="flex items-center bg-gray-200 text-black rounded-2xl p-2 w-full m-2 cursor-default">
+                    <div class="flex">
+                    <span class="pr-2">{{ blobName }}</span>
+                    </div>
+
+                    <div class="flex w-1/12 items-center justify-between ml-auto pr-2">
+                        <span class="pr-2 cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="100" height="100" viewBox="0 0 32 32" class="w-5 h-5">
+                                <path d="M 16 3 C 8.832031 3 3 8.832031 3 16 C 3 23.167969 8.832031 29 16 29 C 23.167969 29 29 23.167969 29 16 C 29 8.832031 23.167969 3 16 3 Z M 16 5 C 22.085938 5 27 9.914063 27 16 C 27 22.085938 22.085938 27 16 27 C 9.914063 27 5 22.085938 5 16 C 5 9.914063 9.914063 5 16 5 Z M 15 10 L 15 12 L 17 12 L 17 10 Z M 15 14 L 15 22 L 17 22 L 17 14 Z"/>
+                            </svg>
+                        </span>
+                        <span class="pr-2 cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                            </svg>
+                                                
+                        </span>
+                    </div>
+                </button>
+                {% endfor %}
+            </div>
+        
+            <!-- MAIN MOBILE -->
+            <div class="h-[calc(100vh-200px)] mt-10 w-5/6 overflow-y-auto rounded-lg bg-white p-6 shadow-md sm:hidden">
+                
+                {% for blobName in blobQuery %}
+                <button class="flex items-center bg-gray-200 text-black rounded-lg p-2 w-full m-2 cursor-default">
+                    <div class="flex w-11/12">
+                      <span class="pr-2">{{ blobName }}</span>
+                    </div>
+
+                    <div class="flex w-1/12 items-center justify-between ml-auto">
+                      <span class="pl-1 cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                      </span>
+                      <span class="pl-1 cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="100" height="100" viewBox="0 0 32 32" class="w-5 h-5">
+                          <path d="M 16 3 C 8.832031 3 3 8.832031 3 16 C 3 23.167969 8.832031 29 16 29 C 23.167969 29 29 23.167969 29 16 C 29 8.832031 23.167969 3 16 3 Z M 16 5 C 22.085938 5 27 9.914063 27 16 C 27 22.085938 22.085938 27 16 27 C 9.914063 27 5 22.085938 5 16 C 5 9.914063 9.914063 5 16 5 Z M 15 10 L 15 12 L 17 12 L 17 10 Z M 15 14 L 15 22 L 17 22 L 17 14 Z"/>
+                        </svg>
+                      </span>
+                    </div>
+                  </button>
+                {% endfor %}
+
+                 <!-- UPLOADING Progress Bar -->
+        
+                <div id="uploadingModal" class="absolute inset-0 transition-opacity duration-300 hidden blur-bg">
+                    <!-- <div class="w-full bg-gray-200 rounded-full dark:bg-gray-700">
+                        <div class="bg-blue-600 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full" style="width: 45%"> 45%</div> -->
+                        <div id="closeUploadModal" class="bg-black w-1 h-1"></div>
+                    </div>
+                </div>
+
+            </div>
+          <div class="top-nav-divider-mobile"></div>
+        </div>
+    </div>
+    </body>
+</html>

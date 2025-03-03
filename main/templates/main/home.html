@@ -10,9 +10,11 @@
     <form id="addFile" action="/addFile/" method='post' enctype= multipart/form-data>
       {% csrf_token %}
       
-      <input type="file" id="blob" name="blob_file">
+      {% comment %} <input type="file" id="blob" name="blob_file">
+      <input type="submit" value="Upload"> {% endcomment %}
+      <input type='text' id='blob' name='blob_file'>
       <input type="submit" value="Upload">
-      
+
     </form> 
   </div>
 

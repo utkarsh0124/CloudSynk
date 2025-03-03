@@ -10,7 +10,7 @@ from .models import UserInfo
 from az_intf import utils
 
 from storage_webapp import logger, severity
-
+from apiConfig import AZURE_API_DISABLE
 
 @login_required
 def remove_user(request):
@@ -20,12 +20,15 @@ def remove_user(request):
     user_info = UserInfo.objects.get(user=usr_obj)
 
     api_instance = api.get_api_instance(user_info.container_name)
-    # delete container handles deleting user
-    api_instance.delete_container()
+    if api_instance:
+        # delete container handles deleting user
+        api_instance.delete_container()
 
-    api.del_api_instance()
+        api.del_api_instance()
 
-    ret_str = "<h1>User Removed</h1>"
+        ret_str = "<h1>User Removed</h1>"
+    else:
+        return HttpResponse("<h1>API Instantiation Failed</h1>")
     return HttpResponse(ret_str)
 
 
@@ -50,13 +53,17 @@ def signup_auth(request):
     
         # User is new. Create new Api object
         api_instance = api.get_api_instance(utils.assign_container(username))
-        user = User.objects.create_user(username=username,password=password1)
-        user.save()
-    
-        # Add a Container for this new User
-        api_instance.add_container(user)
+        if api_instance:
+            user = User.objects.create_user(username=username,password=password1)
+            user.save()
+        
+            # Add a Container for this new User
+            api_instance.add_container(user)
             
-        return redirect(to='/login/')    
+            logger.log(severity['INFO'], 'USER CONTAINER CREATED FOR USER: {}'.format(username))
+            return redirect(to='/login/')    
+        else:
+            return HttpResponse("<h1>API Instantiation Failed</h1>")
     else:
         return_str = "<h1>Try request.POST</h1>"
     return HttpResponse(return_str)
@@ -114,12 +121,17 @@ def user_logout(request):
 def add_blob(request):
     logger.log(severity['INFO'], 'ADD BLOB')
     user_info = UserInfo.objects.get(user=request.user)
-    
+
     #get blob details from form
-    uploaded_file = request.FILES['blob_file']
+    if AZURE_API_DISABLE:
+        #take the text value from the form
+        uploaded_file = request.POST.get("blob_file")
+        filename = uploaded_file
+    else:
+        uploaded_file = request.FILES['blob_file']
+        filename = uploaded_file.name
     
-    filename = uploaded_file.name
-    logger.log(severity['INFO'], 'BLOB NAME {}'.format(filename))
+    logger.log(severity['INFO'], 'BLOB NAME : {}'.format(filename))
 
     #get size of file to be uploaded
     file_size_kb = 100
@@ -132,8 +144,10 @@ def add_blob(request):
     user_info.total_storage_size_kb += file_size_kb
     
     api_instance = api.get_api_instance(user_info.container_name)
-    api_instance.create_blob(uploaded_file, filename)
-    
+    if api_instance:
+        api_instance.create_blob(uploaded_file, filename)
+    else:
+        return HttpResponse("<h1>API Instantiation Failed</h1>")
     return home(request)
 
 
@@ -149,8 +163,11 @@ def delete_blob(request):
         
         #delete from Blob DB
         api_instance = api.get_api_instance(user_info.container_name)
-        user_info.total_storage_size_kb -= api_instance.get_blob_size(blob_name)
-        api_instance.delete_blob(blob_name)       
+        if api_instance:
+            user_info.total_storage_size_kb -= api_instance.get_blob_size(blob_name)
+            api_instance.delete_blob(blob_name)       
+        else:
+            return HttpResponse("<h1>API Instantiation Failed</h1>")
     return home(request)
 
 
@@ -164,7 +181,6 @@ def home(request):
 
         if user_info.count() != 0:
             blob_list = api_instance.list_blob()
-                
             return render(request, 'main/home.html', {'blobQuery' : blob_list})
         else:
             return HttpResponse("<h1>User container not found</h1>")

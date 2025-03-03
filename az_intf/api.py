@@ -1,6 +1,7 @@
 from .api_utils import Container, Auth
 from storage_webapp import logger, severity
 
+from apiConfig import AZURE_API_DISABLE
 
 # Global Definition
 API_INSTANCE = None
@@ -17,12 +18,18 @@ class ApiUtils:
     
 
     def __init__(self, container_name:str):
-        self.__container_obj = Container.Container(
-                                                   container_name,
-                                                   Auth.Auth().auth_api()
-                                                  )
-        self.__blob_obj = self.__container_obj.blob()
-
+        if AZURE_API_DISABLE:
+            self.__container_obj = Container.SampleContainer(
+                                                    container_name,
+                                                    Auth.Auth().auth_api()
+                                                    )
+            self.__blob_obj = self.__container_obj.blob()
+        else:
+            self.__container_obj = Container.Container(
+                                                    container_name,
+                                                    Auth.Auth().auth_api()
+                                                    )
+            self.__blob_obj = self.__container_obj.blob()
 
     def add_container(self, user_obj):
         if self.__container_obj:
@@ -63,6 +70,7 @@ class ApiUtils:
 def get_api_instance(container_name:str):
     global API_INSTANCE
     if API_INSTANCE == None:
+        logger.log(severity['INFO'], 'INITIALIZING WITH CONTAINER {}'.format(container_name))
         API_INSTANCE = ApiUtils(container_name)
     # global API_LOG_INSTANCE
     # if API_LOG_INSTANCE == None:

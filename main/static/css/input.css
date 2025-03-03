@@ -1,0 +1,261 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+
+
+@layer components {
+  .blurred-background {
+    background: rgba(255, 255, 255, 0.7); /* semi-transparent background */
+    backdrop-filter: blur(10px); /* adjust the blur intensity */
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  }
+    .bg-light-blue {
+      background-color: #f7f9fc;
+    }
+  
+    /* Sidebar FULL*/
+    .sidebar-full {
+      @apply fixed left-0 top-0 m-0 
+                  hidden h-screen
+                  w-72
+                  flex-col 
+                  text-black sm:block;
+    }
+  
+    .sidebar-full-logo {
+      @apply relative
+                  left-2 top-2
+                  m-2 h-16
+                  w-72 p-2;
+    }
+  
+    .sidebar-full-card {
+      @apply relative top-16 
+                  m-3
+                  flex
+                  h-36 rounded-2xl
+                  bg-white shadow-sm;
+    }
+  
+    .sidebar-full-card-user-icon {
+      @apply absolute
+                  left-2 top-0 mx-2 my-3
+                  h-16 w-16
+                  rounded-2xl bg-gray-200 p-1;
+    }
+    .sidebar-full-card-user-subscription {
+      @apply absolute left-48 top-0
+          mx-2 my-2 h-4 w-12
+          items-center justify-center
+          rounded-xl bg-gray-200 p-1;
+    }
+  
+    .sidebar-full-card-user-name {
+      @apply absolute left-20 top-4
+                  mx-2 my-3 h-6 w-36
+                  items-center justify-center
+                  rounded-xl bg-gray-200 p-1;
+    }
+  
+    .sidebar-full-card-user-storage-progress-bar {
+      @apply absolute left-2 top-16
+                  mx-2 my-6 h-3 w-56
+                  cursor-default items-center
+                  justify-center rounded-xl bg-gray-200
+                  p-1;
+    }
+  
+    .sidebar-full-card-user-storage-progress-text {
+      @apply absolute left-2 top-28
+                  mx-2 h-5 w-20 cursor-default
+                  items-center justify-center
+                  rounded-xl bg-gray-200
+                  px-4 py-0 text-sm
+                  text-black;
+    }
+  
+    .sidebar-full-container {
+      @apply relative top-12 mx-4 
+                  flex h-96 w-64 flex-col;
+    }
+  
+    .sidebar-full-btn {
+      @apply relative left-2
+                  top-10 mx-2 my-3 flex h-9 w-48
+                  rounded-2xl    
+                  bg-white cursor-pointer
+                  hover:shadow-md;
+    }
+  
+    .sidebar-full-btn-icon {
+      @apply absolute left-1 mx-2
+                  my-0 items-center justify-center p-1;
+    }
+  
+    .sidebar-full-btn-name {
+      @apply absolute left-10 mx-8
+                  my-1 items-center justify-center
+                  font-semibold text-black
+                  ;
+    }
+
+    .sidebar-full-divider {
+      @apply absolute left-72 top-0
+                  hidden h-screen w-0.5
+                  bg-gray-100 sm:block;
+    }
+  
+
+
+    /* Sidebar MOBILE */
+    .sidebar-mobile {
+      @apply fixed mt-24 h-screen w-24 
+                  -translate-x-full bg-gray-200
+                  transition-all duration-300
+                  sm:hidden;
+    }
+  
+    .sidebar-mobile.open {
+      @apply translate-x-0;
+    }
+  
+    .sidebar-mobile-card {
+      @apply relative top-16 
+                  m-4 flex
+                  h-24 rounded-lg
+                  bg-white shadow-sm;
+    }
+  
+    .sidebar-mobile-card-user-icon {
+      @apply absolute left-1 mx-2
+                  my-3 items-center justify-center p-1;
+    }
+  
+    .sidebar-mobile-container {
+      @apply relative top-36 mx-2 
+                  flex h-96 w-16 flex-col;
+    }
+  
+    .sidebar-mobile-btn {
+      @apply top-6 h-12 w-12 
+                  rounded-xl;
+    }
+    .sidebar-mobile-btn:hover {
+      @apply shadow-md;
+    }
+  
+    .sidebar-mobile-btn-icon {
+      @apply absolute mx-2 my-2
+                  items-center justify-center p-1;
+    }
+  
+    .sidebar-mobile-divider {
+      @apply /* */ fixed left-10
+                  top-20 h-screen w-0.5 -translate-x-full
+                  bg-gray-200
+                  transition-all duration-300
+                  sm:hidden;
+    }
+  
+    .sidebar-mobile-divider.open {
+      @apply translate-x-0;
+    }
+  
+    /* Top NAV */
+  
+    .top-nav-full {
+      @apply ml-80 hidden sm:block;
+    }
+    .top-nav-full-grid {
+      @apply grid sm:grid-cols-12;
+    }
+    .top-nav-full-search-span {
+      @apply h-20 sm:col-span-10;
+    }
+    .top-nav-full-search-grid {
+      @apply m-3 grid gap-8 sm:grid-cols-12;
+    }
+  
+    .top-nav-full-search-bar {
+      @apply m-3 rounded-xl sm:col-span-5;
+    }
+    .top-nav-full-search-button {
+      @apply mt-4
+            h-8 w-16 rounded-2xl bg-gray-200
+            sm:col-span-3;
+    }
+    /* .top-nav-full-upload-button {
+      @apply mt-3
+            h-10 w-20 rounded-full bg-blue-200
+            border transition-all duration-300 hover:border-black
+            sm:col-span-3;
+    } */
+    .top-nav-full-toggle-span {
+      @apply mx-4 my-3 h-16 sm:col-span-2;
+    }
+    .top-nav-full-toggle-div {
+      @apply  absolute right-7 mt-16 
+              w-24 h-10 bg-gray-500
+              rounded-md;
+    }
+    .top-nav-full-toggle-div-ctr {
+      @apply absolute right-2 mt-1
+             w-20 h-8 text-white
+             rounded-md pl-1
+             cursor-pointer;
+    }
+  
+    /* Top Nav mobile */
+  
+    .top-nav-mobile {
+      @apply sm:hidden;
+    }
+    .top-nav-mobile-grid {
+      @apply grid grid-cols-6 gap-6;
+    }
+    .top-nav-mobile-search-span {
+      @apply col-span-5 h-20;
+    }
+    .top-nav-mobile-search-grid {
+      @apply m-3 grid grid-cols-6 gap-4;
+    }
+    .top-nav-mobile-search-bar {
+      @apply col-span-4 m-3 rounded-xl;
+    }
+    .top-nav-mobile-search-button {
+      @apply col-span-1 my-4 h-8 w-16 
+                 rounded-2xl bg-gray-200;
+    }
+    .top-nav-mobile-toggle-span {
+      @apply col-span-1 mx-4 my-3 h-16;
+    }
+  
+    .top-nav-divider-mobile {
+      @apply fixed left-0 top-24 h-0.5
+                  w-screen bg-gray-200
+                  sm:hidden;
+    }
+    
+
+    /* Full Scrollable container */
+
+    .scrollable-ctr-full-btn-gray {
+      @apply left-2 text-lg
+                  my-2 flex h-12 w-3/5
+                  pl-9 pt-2 rounded-xl bg-gray-100;
+    }
+
+    .scrollable-ctr-full-btn-gray-left {
+      @apply left-2 text-lg
+                  my-2 flex h-12 w-3/5
+                  pl-9 pt-2 rounded-xl bg-gray-100;
+    }
+    .scrollable-ctr-full-btn-gray-right {
+      @apply left-2 text-lg
+                  my-2 flex h-12 w-3/5
+                  pl-9 pt-2 rounded-xl bg-gray-100;
+    }
+  }

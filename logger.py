@@ -2,10 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import inspect
-import logging
-from logging.handlers import RotatingFileHandler
-from datetime import datetime
-import inspect
+import os
 # import sys
 
 
@@ -36,4 +33,6 @@ class Logger:
 
     def __get_log_file_name(self):
         current_time = datetime.now().strftime("%y%m%d_%H%M%S")
-        return f'boot_{current_time}.log'
+        log_directory = "log"
+        os.makedirs(log_directory, exist_ok=True)
+        return os.path.join(log_directory, f'boot_{current_time}.log')
