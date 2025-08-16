@@ -209,8 +209,8 @@ class SampleContainer:
         pass
     
 
-    def blob(self):
+    def blob(self, user_obj):
         container_client = self.__blob_service_client.get_container_client(self.__container_name)
-        blob_obj = SampleBlob(container_client, self.__container_name)
+        blob_obj = SampleBlob(user_obj, container_client, self.__container_name)
         #shared_variable.increment_api_call_counter()
         return blob_obj

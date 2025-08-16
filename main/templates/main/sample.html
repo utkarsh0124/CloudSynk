@@ -1,0 +1,236 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SimpleDrive</title>
+    <script src="{% static 'js/index.js' %}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/js/all.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single:wght@100..900&family=Tilt+Neon&display=swap" rel="stylesheet">
+    <style>
+        .file-item:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        .selected {
+            background-color: rgba(66, 133, 244, 0.1);
+            border-left: 3px solid #4285f4;
+        }
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;ī
+            z-index: 10;
+        }
+        .dropdown-container {
+            position: relative;
+        }
+    </style>
+  </head>
+  <body>
+    <nav class="flex justify-between px-4 py-4 bg-gray-100 shadow-sm">
+    <div class="flex items-center">
+      <span style="font-family: 'Bitcount Prop Single', sans-serif; font-weight: 55     0; color: #222; font-size: 2rem;">Cloud</span>
+      <span style="font-family: 'Bitcount Prop Single', sans-serif; font-weight: 550; color: #174ea6; font-size: 2rem; margin-left: 4px;">Synk</span>
+    </div>
+      </div>
+      <div>
+        {% comment %}search Bar{% endcomment %}
+        <form action="#" method="get" class="flex items-center bg-white rounded-full shadow px-3 py-1 w-72 focus-within:ring-2 focus-within:ring-blue-400 transition">
+          <input type="text" name="q" placeholder="Search files..." class="flex-grow bg-transparent outline-none text-gray-700 px-2 py-1" autocomplete="off" />
+          <button type="submit" class="text-blue-500 hover:text-blue-700 transition"><i class="fas fa-search"></i></button>
+        </form>
+      </div>
+      <style>
+            #dropdown-menu {
+            min-width: 80px !important;
+            width: 100px !important;
+            font-size: 0.95rem !important;
+            padding: 0.25rem 0 !important;
+            top: 60%; /* Move dropdown even closer to the SVG */
+            }
+            #dropdown-menu a {
+            padding-top: 0.25rem !important;
+            padding-bottom: 0.25rem !important;
+            font-size: 0.95rem !important;
+            }
+        </style>
+      <div class="relative">
+        <div id="menu-toggle" class="cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-6 h-6 my-2">
+            <path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
+          </svg>
+        </div>
+        <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]">
+          <a href="{% url 'logout' %}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Logout</a>
+        </div>
+      </div>
+      <script>
+            $(document).ready(function() {
+            $('#dropdown-menu').hide();
+            $('#menu-toggle').on('click', function(e) {
+                e.stopPropagation();
+                $('#dropdown-menu').toggle();
+            });
+            $(document).on('click', function() {
+                $('#dropdown-menu').hide();
+            });
+            $('#dropdown-menu').on('click', function(e) {
+                e.stopPropagation();
+            });
+            });
+        </script>
+    </nav>
+
+    <div class="flex" style="height: calc(100vh - 80px);">
+      <!-- 80px = nav height -->
+      <!-- Left Side Panel Navigation -->
+      <div class="w-64 bg-white shadow-lg flex flex-col border-r border-gray-200 z-20 hidden sm:flex">
+      <div class="flex flex-col py-6 px-4 space-y-4">
+        <!-- Profile Card -->
+        <div class="bg-gray-50 rounded-2xl shadow p-6 mb-2 flex flex-col justify-between" style="height: 110px;">
+        <div class="flex items-center" style="margin-bottom: 4px; margin-top: -8px;">
+          <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ username }}" alt="Profile" class="w-12 h-12 rounded-full object-cover mr-3" />
+          <span class="font-semibold text-gray-800 text-lg">{{ username }}</span>
+        </div>
+        <!-- Storage Status Bar -->
+        <div class="w-full">
+          <div class="flex justify-between text-xs text-gray-500 mb-1">
+          <span>Storage Used</span>
+          <span>3.2 GB / 10 GB</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2">
+          <div class="bg-blue-500 h-2 rounded-full" style="width: 32%;"></div>
+          </div>
+        </div>
+        </div>
+        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">
+        <i class="fas fa-cog text-xl"></i>
+        <span>Settings</span>
+        </a>
+        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">  
+        <i class="fas fa-question-circle text-xl"></i>
+        <span>Help</span>
+        </a>
+        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition mt-auto">
+        <i class="fas fa-sign-out-alt text-xl"></i>
+        <span>Logout</span>
+        </a>
+      </div>
+      </div>
+      
+      <!-- Scrollable Main Content Area -->
+      <div class="flex-1 overflow-y-auto bg-gray-50 p-8">
+      {% comment %} <h2 class="text-2xl font-semibold mb-6">Your Files</h2> {% endcomment %}
+      <div class="flex justify-start mb-6 items-center space-x-4">
+        <form id="upload-form" action="{% url 'add' %}" method="post" enctype="multipart/form-data" class="relative">
+        {% csrf_token %}
+        <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
+          <i class="fas fa-plus mr-2"></i>
+          <span>Add File</span>
+          <input id="file-upload" name="blob_file" type="file" class="hidden" onchange="document.getElementById('upload-form').submit();" />
+        </label>
+        </form>
+        <!-- View Toggle Buttons -->
+        <div class="flex items-center space-x-2">
+        <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View">
+          <i class="fas fa-th-large"></i>
+        </button>
+        <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View">
+          <i class="fas fa-list"></i>
+        </button>
+        </div>
+      </div>
+      <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for file in blobQuery %}
+        <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
+          <div class="flex items-center mb-2">
+          <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
+          <span class="font-medium text-gray-800">{{ file.blob_name }}</span>
+          </div>
+          <div class="text-xs text-gray-500 mb-1">Size: {{ file.size|filesizeformat }}</div>
+          <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at|date:'M d, Y H:i' }}</div>
+          <div class="flex items-center mt-2 space-x-3">
+          <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
+          <form action="{% url 'delete' file.blob_name %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="text-red-600 hover:underline text-sm flex items-center">
+            <i class="fas fa-trash-alt mr-1"></i>Delete
+            </button>
+          </form>
+          </div>
+        </div>
+        {% empty %}
+        <div class="col-span-full text-center text-gray-400">No files uploaded yet.</div>
+        {% endfor %}
+      </div>
+      <script>
+        $(document).ready(function() {
+        $('#tile-view-btn').on('click', function() {
+          $('#file-list-container')
+          .removeClass('flex flex-col')
+          .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
+          $('.file-item-tile').show();
+          $('.file-item-list').hide();
+        });
+        $('#list-view-btn').on('click', function() {
+          $('#file-list-container')
+          .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
+          .addClass('flex flex-col');
+          $('.file-item-tile').hide();
+          $('.file-item-list').show();
+        });
+        // Initial state: show tile view
+        $('.file-item-list').hide();
+        });
+      </script>
+      <style>
+        /* List view styles */
+        .file-item-list {
+        display: flex;
+        align-items: center;
+        background: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        padding: 1rem;
+        margin-bottom: 1rem;
+        }
+        .file-item-list .file-info {
+        flex: 1;
+        margin-left: 1rem;
+        }
+      </style>
+      <!-- Hidden list view markup for toggling -->
+      <div id="file-list-container-list" style="display:none;">
+        {% for file in blobQuery %}
+        <div class="file-item-list">
+          <i class="fas fa-file-alt text-blue-500 text-2xl"></i>
+          <div class="file-info">
+          <div class="font-medium text-gray-800">{{ file.blob_name }}</div>
+          <div class="text-xs text-gray-500">Size: {{ file.size|filesizeformat }}</div>
+          <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at|date:'M d, Y H:i' }}</div>
+          </div>
+          <div class="flex items-center space-x-3">
+          <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
+          <form action="{% url 'delete' file.blob_name %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="text-red-600 hover:underline text-sm flex items-center">
+            <i class="fas fa-trash-alt mr-1"></i>Delete
+            </button>
+          </form>
+          </div>
+        </div>
+        {% empty %}
+        <div class="text-center text-gray-400">No files uploaded yet.</div>
+        {% endfor %}
+      </div>
+      </div>
+    </div>
+  </body>
+</html>

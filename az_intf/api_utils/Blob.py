@@ -2,18 +2,21 @@ from azure.storage.blob import BlobType
 from django.utils import timezone
 from main.models import Blob as blob_table
 from storage_webapp import logger, severity
+from main.models import UserInfo
 
 import uuid
 import os
 
 
 class Blob:
-    def __init__(self, container_client, container_name:str):
+    def __init__(self, user_obj, container_client, container_name:str):
         self.__container_client = container_client
         self.__container_name = container_name
+        self.__user_obj_info = UserInfo.objects.get(user=user_obj)
+
         # dict<str, set()>
         self.__container_blob_dict = {
-                    self.__container_name : set([_.blob_name for _ in blob_table.objects.filter(container_name=self.__container_name)])
+                    self.__container_name : set([_.blob_name for _ in blob_table.objects.filter(user_id=self.__user_obj_info.user)])
                 }
         
         logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
@@ -168,14 +171,15 @@ class Blob:
 
 
 class SampleBlob:
-    def __init__(self, container_client, container_name:str):
+    def __init__(self, user_obj, container_client, container_name:str):
         self.__container_client = container_client
         self.__container_name = container_name
-        
+        self.__user_obj_info = UserInfo.objects.get(user=user_obj)
+    
         self.__container_blob_dict = {
-                    self.__container_name : set([_.blob_name for _ in blob_table.objects.filter(container_name=self.__container_name)])
-                } # dict<str, set()>
-        
+            self.__container_name: set([_.blob_name for _ in blob_table.objects.filter(user_id=self.__user_obj_info.user)])
+        }  # dict<str, set()>
+
         logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
 
 
@@ -216,15 +220,27 @@ class SampleBlob:
 
 
     def get_list(self):
-        if self.__container_name in self.__container_blob_dict:
-            return list(self.__container_blob_dict[self.__container_name])
-        else:
-            logger.log(severity['ERROR'], 'CONTAINER NOT PRESENT IN DICT : {}'.format(self))
+        # if self.__container_name in self.__container_blob_dict:
+        #     return list(self.__container_blob_dict[self.__container_name])
+        # else:
+        #     logger.log(severity['ERROR'], 'CONTAINER NOT PRESENT IN DICT : {}'.format(self))
+         # Return list of blob dicts for the container
+        blobs = blob_table.objects.filter(user_id=self.__user_obj_info.user)
+        return [
+            {
+                'blob_name': b.blob_name,
+                'size': b.blob_size,
+                'uploaded_at': b.blob_update_time,
+                'download_url': f'/download/{b.blob_name}'  # adjust as needed
+            }
+            for b in blobs
+        ]
     
 
     def blob_exists(self, blob_name:str):
         if self.__container_name in self.__container_blob_dict.keys():
-            logger.log(severity['INFO'], '{} Blob Exist'.format(blob_name))
+            print(self.__container_blob_dict[self.__container_name])
+            print("so : blob_name in self.__container_blob_dict[self.__container_name] ", blob_name in self.__container_blob_dict[self.__container_name])
             return blob_name in self.__container_blob_dict[self.__container_name]
         else:
             logger.log(severity['INFO'], 'BLOB DOES NOT EXIST : {}'.format(blob_name))

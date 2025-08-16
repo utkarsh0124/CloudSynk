@@ -17,19 +17,20 @@ class ApiUtils:
         return cls._instance
     
 
-    def __init__(self, container_name:str):
+    def __init__(self, user_obj, container_name:str):
+        self.__user_obj = user_obj
         if AZURE_API_DISABLE:
             self.__container_obj = Container.SampleContainer(
                                                     container_name,
                                                     Auth.Auth().auth_api()
                                                     )
-            self.__blob_obj = self.__container_obj.blob()
+            self.__blob_obj = self.__container_obj.blob(self.__user_obj)
         else:
             self.__container_obj = Container.Container(
                                                     container_name,
                                                     Auth.Auth().auth_api()
                                                     )
-            self.__blob_obj = self.__container_obj.blob()
+            self.__blob_obj = self.__container_obj.blob(self.__user_obj)
 
     def add_container(self, user_obj):
         if self.__container_obj:
@@ -64,14 +65,14 @@ class ApiUtils:
 
 
     def list_blob(self):
-        return self.__container_obj.blob().get_list()
+        return self.__container_obj.blob(self.__user_obj).get_list()
 
 
-def get_api_instance(container_name:str):
+def get_api_instance(user_obj, container_name:str):
     global API_INSTANCE
     if API_INSTANCE == None:
         logger.log(severity['INFO'], 'INITIALIZING WITH CONTAINER {}'.format(container_name))
-        API_INSTANCE = ApiUtils(container_name)
+        API_INSTANCE = ApiUtils(user_obj, container_name)
     # global API_LOG_INSTANCE
     # if API_LOG_INSTANCE == None:
     #     API_LOG_INSTANCE = logger.get_api_log_instance()

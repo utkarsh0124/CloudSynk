@@ -1,0 +1,301 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleDrive</title>
+    <script src="{% static 'js/index.js' %}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/js/all.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        .file-item:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        .selected {
+            background-color: rgba(66, 133, 244, 0.1);
+            border-left: 3px solid #4285f4;
+        }
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            z-index: 10;
+        }
+        .dropdown-container {
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center"> 
+                <h1 class="text-xl font-bold text-gray-800">SimpleDrive</h1>
+                <div class="ml-24 relative">
+                    <input type="text" placeholder="Search in Drive" class="pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                    <i class="fas fa-search text-gray-500 absolute left-3 top-3"></i>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="upload-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center">
+                    <i class="fas fa-plus mr-2"></i> New
+                </button>
+                <div class="relative">
+                    <div id="user-btn" class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center cursor-pointer">
+                        <span>U</span>
+                    </div>
+                    <!-- User Dropdown Menu -->
+                    <div id="user-dropdown" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 hidden">
+                        <div class="px-4 py-3 border-b">
+                            <p class="text-sm font-medium text-gray-900">User Name</p>
+                            <p class="text-sm text-gray-500 truncate">user@example.com</p>
+                        </div>
+                        <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                            <i class="fas fa-cog w-5 mr-2 text-gray-500"></i>Settings
+                        </a>
+                        {% csrf_token %}
+                        <a href="logout" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                            <i class="fas fa-sign-out-alt w-5 mr-2 text-gray-500"></i>Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <div class="w-56 bg-white shadow-sm p-4 flex flex-col">
+            {% comment %} <div class="flex items-center space-x-3 p-2 rounded-full hover:bg-gray-100 text-gray-700 font-medium cursor-pointer">
+                <i class="fas fa-users w-5"></i>
+                <span>Shared with me</span>
+            </div>
+            <div class="flex items-center space-x-3 p-2 rounded-full hover:bg-gray-100 text-gray-700 font-medium cursor-pointer">
+                <i class="fas fa-clock w-5"></i>
+                <span>Recent</span>
+            </div>
+            <div class="flex items-center space-x-3 p-2 rounded-full hover:bg-gray-100 text-gray-700 font-medium cursor-pointer">
+                <i class="fas fa-star w-5"></i>
+                <span>Starred</span>
+            </div>
+            <div class="flex items-center space-x-3 p-2 rounded-full hover:bg-gray-100 text-gray-700 font-medium cursor-pointer">
+                <i class="fas fa-trash w-5"></i>
+                <span>Trash</span>
+            </div> {% endcomment %}
+            <div class="flex items-center space-x-3 p-2 rounded-full hover:bg-gray-100 text-gray-700 font-medium cursor-pointer">
+                <i class="fas fa-about w-5"></i>
+                <span>About</span>
+            </div> 
+            <hr class="my-4">
+            <div class="flex items-center space-x-3 p-2 rounded-full hover:bg-gray-100 text-gray-700 font-medium cursor-pointer">
+                <i class="fas fa-cloud w-5"></i>
+                <span>Storage</span>
+            </div>
+            <div class="mt-2 px-2">
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-500 h-2 rounded-full" style="width: 25%"></div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">1.2 GB of 5 GB used</div>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="flex-1 p-6 overflow-auto">
+            <div>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-medium text-gray-700">My Files</h2>
+                    <div class="flex items-center space-x-2">
+                        <button class="p-2 hover:bg-gray-100 rounded-full">
+                            <i class="fas fa-th text-gray-600"></i>
+                        </button>
+                        <button class="p-2 hover:bg-gray-100 rounded-full">
+                            <i class="fas fa-list text-gray-600"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow">
+                    <div class="grid grid-cols-12 p-3 text-sm font-medium text-gray-500 border-b">
+                        <div class="col-span-7">Name</div>
+                        <div class="col-span-2">Last Modified</div>
+                        <div class="col-span-2">File size</div>
+                        <div class="col-span-1">Actions</div>
+                    </div>
+                    
+                    <div id="file-list">
+                        {% for blobName in blobQuery %}
+                        <div class="file-item grid grid-cols-12 p-3 hover:bg-gray-50 cursor-pointer border-b">
+                            <div class="col-span-7 flex items-center">
+                                <i class="far fa-folder text-gray-500 mr-3 text-xl"></i>
+                                <span>Project Documents</span>
+                            </div>
+                            <div class="col-span-2 flex items-center">Mar 2, 2025</div>
+                            <div class="col-span-2 flex items-center">--</div>
+                            <div class="col-span-1 flex items-center justify-center dropdown-container">
+                                <button class="action-btn p-1 hover:bg-gray-100 rounded-full">
+                                    <i class="fas fa-ellipsis-v text-gray-500"></i>
+                                </button>
+                                <div class="dropdown-menu bg-white rounded-lg shadow-lg py-1 w-36">
+                                    <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                                        <i class="fas fa-download mr-3 w-4 text-gray-500"></i>
+                                        <span>Download</span>
+                                    </div>
+                                    <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                                        <i class="fas fa-pencil-alt mr-3 w-4 text-gray-500"></i>
+                                        <span>Rename</span>
+                                    </div>
+                                    <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                                        <i class="fas fa-trash mr-3 w-4 text-gray-500"></i>
+                                        <span>Delete</span>
+                                    </div>
+                                    <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                                        <i class="fas fa-share mr-3 w-4 text-gray-500"></i>
+                                        <span>Share</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Upload -->
+    <div id="create-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg w-96 p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium">Upload</h3>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-3">
+                <div class="flex items-center p-3 hover:bg-gray-100 rounded cursor-pointer">
+                    <i class="far fa-folder text-gray-600 mr-3"></i>
+                    {% comment %} <span>Upload Folder</span> {% endcomment %}
+                    <input type="file" id="file-input" class="hidden" />
+                    <button type="submit" id="upload-button">Upload Folder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right-click context menu -->
+    <div id="context-menu" class="bg-white rounded-lg shadow-lg absolute hidden">
+        <div class="py-1">
+            <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                <i class="fas fa-eye mr-3 w-5 text-gray-500"></i>
+                <span>Preview</span>
+            </div>
+            <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                <i class="fas fa-download mr-3 w-5 text-gray-500"></i>
+                <span>Download</span>
+            </div>
+            <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                <i class="fas fa-share mr-3 w-5 text-gray-500"></i>
+                <span>Share</span>
+            </div>
+            <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                <i class="fas fa-pencil-alt mr-3 w-5 text-gray-500"></i>
+                <span>Rename</span>
+            </div>
+            <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center">
+                <i class="fas fa-trash mr-3 w-5 text-gray-500"></i>
+                <span>Move to trash</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Toggle upload modal
+            $('#upload-btn').click(function() {
+                $('#create-modal').removeClass('hidden');
+            });
+            
+            $('#close-modal').click(function() {
+                $('#create-modal').addClass('hidden');
+            });
+            
+            // Close modal when clicking outside
+            $('#create-modal').click(function(e) {
+                if (e.target.id === 'create-modal') {
+                    $('#create-modal').addClass('hidden');
+                }
+            });
+            
+            // User dropdown toggle
+            $('#user-btn').click(function(e) {
+                e.stopPropagation();
+                $('#user-dropdown').toggleClass('hidden');
+            });
+            
+            // Action button dropdown toggle (click-based, not hover)
+            $('.action-btn').click(function(e) {
+                e.stopPropagation();
+                
+                // Hide all other dropdowns first
+                $('.dropdown-menu').not($(this).siblings('.dropdown-menu')).hide();
+                
+                // Toggle the clicked dropdown
+                $(this).siblings('.dropdown-menu').toggle();
+            });
+            
+            // Hide all dropdowns when clicking elsewhere
+            $(document).click(function() {
+                $('#user-dropdown').addClass('hidden');
+                $('.dropdown-menu').hide();
+            });
+            
+            // File selection
+            $('.file-item').click(function() {
+                $('.file-item').removeClass('selected');
+                $(this).addClass('selected');
+            });
+            
+            // Context menu
+            $('.file-item').on('contextmenu', function(e) {
+                e.preventDefault();
+                const x = e.pageX;
+                const y = e.pageY;
+                
+                $('#context-menu').css({
+                    top: y + 'px',
+                    left: x + 'px'
+                }).removeClass('hidden');
+                
+                // Select the right-clicked item
+                $('.file-item').removeClass('selected');
+                $(this).addClass('selected');
+            });
+            
+            // Hide context menu when clicking elsewhere
+            $(document).click(function() {
+                $('#context-menu').addClass('hidden');
+            });
+            
+            // Folder upload
+            $('.flex:contains("Upload Folder")').click(function() {
+                $('#folder-upload').click();
+            });
+            
+            $('#folder-upload').change(function() {
+                if (this.files.length > 0) {
+                    alert('Folder selected with ' + this.files.length + ' files');
+                    // Here you would typically use AJAX to upload the files to your Django backend
+                    // $.ajax({...})
+                }
+            });
+        });
+    </script>
+</body>
+</html>
