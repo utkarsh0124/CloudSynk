@@ -22,11 +22,11 @@ class Blob:
         logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
 
 
-    def __add_to_dict(self, blob_name:str):
-        if not self.blob_exists(blob_name):
-            self.__container_blob_dict[self.__container_name].add(blob_name)
+    def __add_to_dict(self, blob_obj):
+        if not self.blob_exists(blob_obj.blob_name):
+            self.__container_blob_dict[self.__container_name].add(blob_obj)
         else:
-            logger.log(severity['ERROR'], 'BLOB ALREADY PRESENT CANNOT ADD TO DICT : {}'.format(blob_name))
+            logger.log(severity['ERROR'], 'BLOB ALREADY PRESENT CANNOT ADD TO DICT : {}'.format(blob_obj.blob_name))
 
 
     def __remove_from_dict(self, blob_name:str):
@@ -38,19 +38,18 @@ class Blob:
 
     def __add_to_db(self, blob_name:str):
         new_blob_entry = blob_table()
-        
+        new_blob_entry.user_id = self.__user_obj_info.user
         new_blob_entry.blob_name = blob_name
-        new_blob_entry.container_name = self.__container_name
         new_blob_entry.blob_size = 0
-        new_blob_entry.blob_update_time = timezone.now()
+        new_blob_entry.creation_time = timezone.now()
         new_blob_entry.save()
 
         # udpate dict
-        self.__add_to_dict(blob_name)
+        self.__add_to_dict(new_blob_entry)
 
 
     def __delete_from_db(self, blob_name:str):
-        blob_obj = blob_table.objects.get(blob_name=blob_name, container_name=self.__container_name)        
+        blob_obj = blob_table.objects.get(blob_name=blob_name)        
         blob_obj.delete()
 
         #update dict
@@ -74,7 +73,16 @@ class Blob:
             return False
 
 
-    def blob_create(self, uploaded_file, blob_name):
+    def get_blob_size(self, blob_name:str):
+        if self.blob_exists(blob_name):
+            blob_obj = blob_table.objects.get(blob_name=blob_name)
+            return blob_obj.blob_size
+        else:
+            logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
+            return -1
+
+
+    def blob_create(self, blob_name):
         operation_status = 0
         
         logger.log(severity['INFO'], 'CREATING BLOB : {}'.format(blob_name))
@@ -162,7 +170,7 @@ class Blob:
     def delete_all(self):
         blob_list = self.__container_blob_dict[self.__container_name]
         for blob_name in blob_list:
-            blob_obj = blob_table.objects.get(blob_name=blob_name, container_name=self.__container_name)        
+            blob_obj = blob_table.objects.get(blob_name=blob_name)        
             blob_obj.delete()
         
         del self.__container_blob_dict[self.__container_name]
@@ -177,13 +185,30 @@ class SampleBlob:
         self.__user_obj_info = UserInfo.objects.get(user=user_obj)
     
         self.__container_blob_dict = {
-            self.__container_name: set([_.blob_name for _ in blob_table.objects.filter(user_id=self.__user_obj_info.user)])
-        }  # dict<str, set()>
+            self.__container_name: set([blob_obj.blob_name for blob_obj in blob_table.objects.filter(user_id=self.__user_obj_info.user)])
+        }  # dict<container_name:str, set:(blob_name:str)> -> all blobs that exist in the container for current user
+
+        print("Initial Container Dict : ", self.__container_blob_dict)
+        print("Initial Container list size : ", len(self.__container_blob_dict[self.__container_name]))
 
         logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
 
+    def blob_exists(self, blob_name:str):
+        if self.__container_name in self.__container_blob_dict.keys():
+            print("Container list : ")
+            for blob in self.__container_blob_dict[self.__container_name]:
+                print(blob)
+            return blob_name in [blob for blob in self.__container_blob_dict[self.__container_name]]
+        else:
+            logger.log(severity['INFO'], 'BLOB DOES NOT EXIST : {}'.format(blob_name))
+            return False
 
-    def __add_to_dict(self, blob_name:str):
+    def get_blob_obj(self, blob_name:str):
+        if self.__container_name in self.__container_blob_dict.keys():
+            if self.blob_exists(blob_name):
+                return blob_name in self.__container_blob_dict[self.__container_name]
+
+    def __add_to_dict(self, blob_name):
         if not self.blob_exists(blob_name):
             self.__container_blob_dict[self.__container_name].add(blob_name)
         else:
@@ -201,19 +226,25 @@ class SampleBlob:
         new_blob_entry = blob_table()
         
         new_blob_entry.blob_name = blob_name
+        new_blob_entry.user_id = self.__user_obj_info.user
         new_blob_entry.container_name = self.__container_name
         new_blob_entry.blob_size = 0
         new_blob_entry.blob_update_time = timezone.now()
         new_blob_entry.save()
 
         # udpate dict
-        self.__add_to_dict(blob_name)
-
+        if new_blob_entry.blob_id:
+            self.__add_to_dict(new_blob_entry.blob_name)
+        else:
+            print("blob id not found. cannot add to dict! : ", blob_name)
 
     def __delete_from_db(self, blob_name:str):
-        blob_obj = blob_table.objects.get(blob_name=blob_name, container_name=self.__container_name)        
-        blob_obj.delete()
-
+        blob_obj = blob_table.objects.get(blob_name=blob_name, user_id=self.__user_obj_info.user)
+        if blob_obj:
+            blob_obj.delete()
+        else:
+            logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
+        
         #update dict
         self.__remove_from_dict(blob_name)
         logger.log(severity['INFO'], 'BLOB DELETED : {}'.format(blob_name))
@@ -225,35 +256,30 @@ class SampleBlob:
         # else:
         #     logger.log(severity['ERROR'], 'CONTAINER NOT PRESENT IN DICT : {}'.format(self))
          # Return list of blob dicts for the container
-        blobs = blob_table.objects.filter(user_id=self.__user_obj_info.user)
+        blob_obj = blob_table.objects.filter(user_id=self.__user_obj_info.user)
         return [
             {
                 'blob_name': b.blob_name,
                 'size': b.blob_size,
-                'uploaded_at': b.blob_update_time,
+                'uploaded_at': b.creation_time,
                 'download_url': f'/download/{b.blob_name}'  # adjust as needed
             }
-            for b in blobs
-        ]
-    
+            for b in blob_obj
+        ]    
 
-    def blob_exists(self, blob_name:str):
-        if self.__container_name in self.__container_blob_dict.keys():
-            print(self.__container_blob_dict[self.__container_name])
-            print("so : blob_name in self.__container_blob_dict[self.__container_name] ", blob_name in self.__container_blob_dict[self.__container_name])
-            return blob_name in self.__container_blob_dict[self.__container_name]
+    def get_blob_size(self, blob_name:str):
+        if blob_obj := blob_table.objects.filter(blob_name=blob_name, user_id=self.__user_obj_info.user).first():
+            return blob_obj.blob_size
         else:
-            logger.log(severity['INFO'], 'BLOB DOES NOT EXIST : {}'.format(blob_name))
-            return False
+            logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
+            return -1
 
-
-    def blob_create(self, uploaded_file, blob_name):
+    def blob_create(self, file_name:str):
         operation_status = 0
-        
-        logger.log(severity['INFO'], 'CREATING BLOB : {}'.format(blob_name))
-        
-        if self.blob_exists(blob_name):
-            logger.log(severity['ERROR'], 'BLOB ALREADY EXISTS: {}'.format(blob_name))
+        logger.log(severity['INFO'], 'CREATING BLOB : {}'.format(file_name))
+
+        if self.blob_exists(file_name):
+            logger.log(severity['ERROR'], 'BLOB ALREADY EXISTS: {}'.format(file_name))
             return operation_status
         
         ''' 
@@ -261,8 +287,8 @@ class SampleBlob:
         '''
         
         #update db
-        self.__add_to_db(blob_name)
-        
+        self.__add_to_db(file_name)
+
         return operation_status
     
         
@@ -295,15 +321,11 @@ class SampleBlob:
         return operation_status
     
     
-    def delete_all(self):
-        blob_list = self.__container_blob_dict[self.__container_name]
-        for blob_name in blob_list:
-            blob_obj = blob_table.objects.get(blob_name=blob_name, container_name=self.__container_name)        
-            blob_obj.delete()
-        
-        del self.__container_blob_dict[self.__container_name]
-        logger.log(severity['INFO'], 'ALL BLOBS DELETED')
-
-
-
-        
+    def delete_all_blobs(self):
+        if self.__container_name in self.__container_blob_dict.keys():
+            for blob in self.__container_blob_dict[self.__container_name]:
+                blob.delete()
+            del self.__container_blob_dict[self.__container_name]
+            logger.log(severity['INFO'], 'ALL BLOBS DELETED')
+        else:
+            logger.log(severity['ERROR'], 'CONTAINER NOT FOUND : {}'.format(self.__container_name))

@@ -1,7 +1,10 @@
 {% load static %}
 {% load crispy_forms_tags %} {% block content %}
-
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="stylesheet" href="{% static '/css/login.css' %}">
+<script src="{% static 'js/login.js' %}"></script>
+
 {{form|crispy}}
   <!-- Modal Content -->
   <form class="modal-content animate" action="/auth_login/" method="post" enctype= multipart/form-data>

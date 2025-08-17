@@ -1,9 +1,10 @@
 from django.shortcuts import render, redirect
-from django.http import HttpResponse, JsonResponse
-from django.contrib import auth, messages
+from django.http import JsonResponse
+from django.contrib import auth
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from urllib3 import request
 from .subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 
@@ -25,23 +26,18 @@ def remove_user(request):
     if api_instance:
         # delete container handles deleting user
         api_instance.delete_container()
-
         api.del_api_instance()
-
-        ret_str = "<h1>User Removed</h1>"
     else:
-        return HttpResponse("<h1>API Instantiation Failed</h1>")
-    return HttpResponse(ret_str)
-
+        return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
+    return JsonResponse({'success': True, 'redirect': '/'}, status=200)
 
 def user_signup(request):
     logger.log(severity['INFO'], 'SIGNUP')
-    return render(request, 'user/signup.html')
+    return JsonResponse({'success': True, 'redirect': '/'}, status=200)
 
 
 def signup_auth(request):
     logger.log(severity['INFO'], 'SIGNUP AUTH')
-    return_str = '<H1>USER SIGNUP COMPLETED </H1>'  
     
     if request.method == 'POST':
         username = request.POST.get("username")
@@ -49,11 +45,10 @@ def signup_auth(request):
         password2 = request.POST.get("password2")
     
         if password1 != password2:
-           return HttpResponse("<h1>Passwords dos not match</h1>")
+           return JsonResponse({'success': False, 'error': 'Passwords do not match', 'redirect': 'signup/'}, status=400)
         if utils.user_exists(username):
-            return HttpResponse("<h1>Username already exists</h1>")
+            return JsonResponse({'success': False, 'error': 'Username already exists', 'redirect': 'signup/'}, status=400)
 
-        print('API Instance created for user:', username)
         user = User.objects.create_user(username=username,password=password1)
         user.save()
         user_info, created = UserInfo.objects.get_or_create(
@@ -71,22 +66,20 @@ def signup_auth(request):
         if created:
             api_instance = api.get_api_instance(user, utils.assign_container(username))
             if api_instance:
-                print('User created:', user)
                 # Add a Container for this new User
                 api_instance.add_container(user)
                 
                 logger.log(severity['INFO'], 'USER CONTAINER CREATED FOR USER: {}'.format(username))
-                return redirect(to='/login/')    
+                return JsonResponse({'success': True, 'redirect': '/login/'}, status=200)
             else:
                 #delete user if instantiation failed
                 user.delete()
                 user_info.delete()
-                return HttpResponse("<h1>API Instantiation Failed</h1>")
+                return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
         else:
-            return HttpResponse("<h1>User already exists</h1>")
+            return JsonResponse({'success': False, 'error': 'User already exists', 'redirect': '/'}, status=400)
     else:
-        return_str = "<h1>Try request.POST</h1>"
-    return HttpResponse(return_str)
+        return JsonResponse({'success': False, 'error': 'Invalid request method', 'redirect': '/'}, status=400)
 
 
 def user_login(request):
@@ -96,11 +89,10 @@ def user_login(request):
 
 def login_auth(request):
     logger.log(severity['INFO'], 'LOGIN AUTH')
-    return_str = '<H1>LOGIN FAILED PLEASE RELOAD AND TRY AGAIN</H1>'
-    
-    if request.user.is_authenticated:
-        logger.log(severity['INFO'], 'User already Logged in')
-        return redirect("/")
+
+    if request.user.is_authenticated:        
+        logger.log(severity['INFO'], 'User: {} already logged in'.format(request.user.username))
+        return home(request)
     
     if request.method == 'POST':
         username = request.POST.get("username")
@@ -108,33 +100,35 @@ def login_auth(request):
 
         logger.log(severity['INFO'], 'USER:{} '.format(username))
 
+        if not username or not password:
+            return JsonResponse({'success': False, 'error': 'Missing username or password', 'redirect': '/'}, status=400)
+
         if not utils.username_valid(username):
-            return HttpResponse("<h1>Username Not Found</h1>")
-        
+            return JsonResponse({'success': False, 'error': 'Invalid username', 'redirect': '/'}, status=400)
+
         if utils.user_exists(username):
             user = authenticate(username=username, password=password)
-            
-            if user is not None:
+            if user:
                 login(request, user)
-                return redirect('/')
+                return JsonResponse({'success': True, 'redirect': '/'})
             else:
-                #Django authentication failed
-                return HttpResponse("<h1>Incorrect Password</h1>")
+                #Django authentication failed! Incorrect password
+                return JsonResponse({'success': False, 'error': 'Invalid credentials', 'redirect': '/'}, status=400)
         else:
-            return HttpResponse("<h1>Invalid Username</h1>")
-    return HttpResponse(return_str)
-
+            #Django authentication failed! Incorrect password
+            return JsonResponse({'success': False, 'error': 'Invalid credentials', 'redirect': '/'}, status=400)
+    else:
+        return JsonResponse({'success': False, 'error': 'Invalid request method', 'redirect': '/'}, status=400)
 
 @login_required
 def user_logout(request):
     logger.log(severity['INFO'], 'LOGOUT USER {}'.format(request.user.username))
     if request.user.is_authenticated:
         auth.logout(request)
-
         # delete singleton object allocated for the user 
         api.del_api_instance()
-        return HttpResponse("<H1>User logged out</H1>")
-    return redirect('/')
+        return home(request)
+    return JsonResponse({'success': False, 'error': 'User not authenticated', 'redirect': '/'}, status=400)
 
 
 @login_required
@@ -145,28 +139,33 @@ def add_blob(request):
     if AZURE_API_DISABLE:
         #take the text value from the form
         uploaded_file = request.FILES.get("blob_file")
-        filename = uploaded_file.name
+        file_name = request.GET.get('file_name')
     else:
         uploaded_file = request.FILES['blob_file']
-        filename = uploaded_file.name
+        file_name = request.GET.get('file_name')
+
+    logger.log(severity['INFO'], 'BLOB NAME : {}'.format(file_name))
     
-    logger.log(severity['INFO'], 'BLOB NAME : {}'.format(filename))
+    if file_name is None:
+        return JsonResponse({'success': False, 'error': 'Missing file name', 'redirect': '/'}, status=400)
+
+    logger.log(severity['INFO'], 'BLOB NAME : {}'.format(file_name))
 
     #get size of file to be uploaded
-    file_size_kb = 100
+    file_size_bytes = 100
     
     #check if the new blob exceeds data_storage_limit
-    if user_info.total_storage_size_kb + file_size_kb >= user_info.storage_quota_kb:
-        return HttpResponse("<h1>Storage Exceeded!<br>UPLOAD FAILED</h1>")    
-    
+    if user_info.storage_used_bytes + file_size_bytes >= user_info.storage_quota_bytes:
+        return JsonResponse({'success': False, 'error': 'Storage Exceeded! Upload Failed', 'redirect': '/'}, status=400)
+
     #update the total storage for this user in user_info DB
-    user_info.total_storage_size_kb += file_size_kb
+    user_info.storage_used_bytes += file_size_bytes
     
     api_instance = api.get_api_instance(request.user, user_info.container_name)
     if api_instance:
-        api_instance.create_blob(uploaded_file, filename)
+        api_instance.create_blob(file_name)
     else:
-        return HttpResponse("<h1>API Instantiation Failed</h1>")
+        return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
     return home(request)
 
 
@@ -182,31 +181,28 @@ def delete_blob(request, blob_name):
         #delete from Blob DB
         api_instance = api.get_api_instance(request.user, user_info.container_name)
         if api_instance:
-            user_info.total_storage_size_kb -= api_instance.get_blob_size(blob_name)
+            user_info.storage_used_bytes -= api_instance.get_blob_size(blob_name)
             api_instance.delete_blob(blob_name)       
         else:
-            return HttpResponse("<h1>API Instantiation Failed</h1>")
+            return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
     return home(request)
 
 
 @login_required
 def home(request):
     logger.log(severity['INFO'], 'HOME')
+    user_info = UserInfo.objects.filter(user=request.user).values()
+    api_instance = api.get_api_instance(request.user, user_info[0]['container_name'])
 
-    if request.user.username != 'admin':
-        user_info = UserInfo.objects.filter(user=request.user).values()
-        api_instance = api.get_api_instance(request.user, user_info[0]['container_name'])
-
-        if user_info.count() != 0:
-            blob_list = api_instance.list_blob()
-            return render(
-                request, 
-                'main/sample.html', 
-                {
-                    'blobQuery' : blob_list,
-                    'username': request.user.username
-                }
-            )
-        else:
-            return HttpResponse("<h1>User container not found</h1>")
-    return redirect('login/')
+    if user_info.count() != 0:
+        blob_list = api_instance.list_blob()
+        return render(
+                    request, 
+                    'main/sample.html', 
+                    {
+                        'blobQuery': blob_list,
+                        'username': request.user.username,
+                        'json_status': {'status': 'success'}
+                    }
+                )
+    return JsonResponse({'success': False, 'error': 'User info not found', 'redirect': '/login/'}, status=400)

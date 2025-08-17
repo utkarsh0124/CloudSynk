@@ -15,7 +15,6 @@ class ApiUtils:
         if not cls._instance:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
 
     def __init__(self, user_obj, container_name:str):
         self.__user_obj = user_obj
@@ -37,14 +36,12 @@ class ApiUtils:
             self.__container_obj.container_create(user_obj)
         else:
             logger.log(severity['ERROR'], 'CONTAINER OBJECT IS NONE')
-
         
-    def create_blob(self, uploaded_file, blob_path:str):
+    def create_blob(self, file_name):
         if self.__blob_obj:
-            self.__blob_obj.blob_create(uploaded_file, blob_path)
+            self.__blob_obj.blob_create(file_name)
         else:
             logger.log(severity['ERROR'], 'BLOB OBJECT IS NONE')
-
 
     def delete_container(self):
         if self.__container_obj:
@@ -52,17 +49,14 @@ class ApiUtils:
         else:
             logger.log(severity['ERROR'], 'CONTAINER OBJECT IS NONE')
         
-
     def delete_blob(self, blob_path:str):
         if self.__blob_obj:
             self.__blob_obj.blob_delete(blob_path)
         else:
             logger.log(severity['ERROR'], 'BLOB OBJECT IS NONE')
     
-
     def get_blob_size(self, blob_path:str):
-        return 0
-
+        return self.__blob_obj.get_blob_size(blob_path)
 
     def list_blob(self):
         return self.__container_obj.blob(self.__user_obj).get_list()

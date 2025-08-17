@@ -12,7 +12,7 @@ MAX_SHARING_LINK_LENGTH = 1024
 
 class Blob(models.Model):
     blob_id = models.SlugField(max_length=MAX_HASH_ID_FIELD_LENGTH, unique=True, editable=False, null=False, blank=False) # primary key
-    blob_name = models.CharField(max_length=MAX_BLOB_NAME_LENGTH, null=False, blank=False) # unique
+    blob_name = models.CharField(max_length=MAX_BLOB_NAME_LENGTH, null=False, blank=False) # same blob names can exist for multiple users
     blob_size = models.BigIntegerField(null=False, blank=False, default=0)  # size in bytes
     user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=False, blank=False) # foreign key
     creation_time = models.FloatField(null=False, blank=True, default=time.time)
@@ -76,7 +76,7 @@ class UserInfo(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True) # primary key
     user_name = models.CharField(max_length=100, null=False, blank=False)
     subscription_type = models.CharField(max_length=MAX_CHOICES_LENGTH, choices=SUBSCRIPTION_CHOICES, default="STARTER")
-    container_name = models.CharField(max_length=250, default="default-container")
+    container_name = models.CharField(max_length=250, default="None")
     storage_quota_bytes = models.BigIntegerField(null=False, default=0)  # 0 GB default quota
     storage_used_bytes = models.BigIntegerField(null=False, default=0)
     dob = models.DateField(null=True, blank=True)
