@@ -24,12 +24,16 @@ class Logger:
         console_handler.setLevel(logging.ERROR)
         console_handler.setFormatter(formatter)
 
-        file_handler = RotatingFileHandler(self.__get_log_file_name(), maxBytes=500*1024, backupCount=5)
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
+        try:
+            file_handler = RotatingFileHandler(self.__get_log_file_name(), maxBytes=500*1024, backupCount=5)
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+        except PermissionError:
+            # Fallback: cannot write to file in this environment, proceed with console only
+            pass
 
         self.logger.addHandler(console_handler)
-        self.logger.addHandler(file_handler)
 
     def __get_log_file_name(self):
         current_time = datetime.now().strftime("%y%m%d_%H%M%S")
