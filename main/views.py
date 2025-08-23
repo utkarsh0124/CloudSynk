@@ -14,6 +14,8 @@ from az_intf import utils
 
 from storage_webapp import logger, severity
 from apiConfig import AZURE_API_DISABLE
+from django.shortcuts import redirect
+from django.contrib.auth import authenticate as django_authenticate
 
 @login_required
 def remove_user(request):
@@ -33,8 +35,13 @@ def remove_user(request):
 
 def user_signup(request):
     logger.log(severity['INFO'], 'SIGNUP')
-    return JsonResponse({'success': True, 'redirect': '/'}, status=200)
-
+    return render(
+                    request, 
+                    'user/signup.html', 
+                    {
+                        'json_status': {'status': 'success'}
+                    }
+                )
 
 def signup_auth(request):
     logger.log(severity['INFO'], 'SIGNUP AUTH')
@@ -70,7 +77,7 @@ def signup_auth(request):
                 api_instance.add_container(user)
                 
                 logger.log(severity['INFO'], 'USER CONTAINER CREATED FOR USER: {}'.format(username))
-                return JsonResponse({'success': True, 'redirect': '/login/'}, status=200)
+                return redirect('/login/')    
             else:
                 #delete user if instantiation failed
                 user.delete()
@@ -98,6 +105,18 @@ def login_auth(request):
         username = request.POST.get("username")
         password = request.POST.get("password")
 
+        user = django_authenticate(username=username, password=password)
+        if user is not None and user.is_superuser:
+            login(request, user)
+            logger.log(severity['INFO'], 'ADMIN LOGIN SUCCESS')
+            return JsonResponse({'success': True, 'redirect': '/admin/'}, status=200)
+        elif username and user is not None:
+            # Proceed with normal user login below
+            pass
+        elif username:
+            logger.log(severity['ERROR'], 'ADMIN LOGIN FAILED')
+            return JsonResponse({'success': False, 'error': 'Invalid admin credentials', 'redirect': '/login/'}, status=400)
+            
         logger.log(severity['INFO'], 'USER:{} '.format(username))
 
         if not username or not password:
