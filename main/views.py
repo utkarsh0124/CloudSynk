@@ -1,227 +1,199 @@
-from django.shortcuts import render, redirect
-from django.http import JsonResponse
-from django.contrib import auth
-from django.contrib.auth import login, logout, authenticate
-from django.contrib.auth.decorators import login_required
+import warnings
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
-from urllib3 import request
 from .subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
-
 from az_intf import api
 from .models import UserInfo
 from az_intf import utils
-
-from storage_webapp import logger, severity
 from apiConfig import AZURE_API_DISABLE
-from django.shortcuts import redirect
-from django.contrib.auth import authenticate as django_authenticate
+from .serializers import SignupSerializer, LoginSerializer
 
-@login_required
-def remove_user(request):
-    usr_obj = request.user
-    auth.logout(request)
-    
-    user_info = UserInfo.objects.get(user=usr_obj)
 
-    api_instance = api.get_api_instance(request.user, user_info.container_name)
-    if api_instance:
-        # delete container handles deleting user
-        api_instance.delete_container()
-        api.del_api_instance()
-    else:
-        return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
-    return JsonResponse({'success': True, 'redirect': '/'}, status=200)
+class RemoveUserAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-def user_signup(request):
-    logger.log(severity['INFO'], 'SIGNUP')
-    return render(
-                    request, 
-                    'user/signup.html', 
-                    {
-                        'json_status': {'status': 'success'}
-                    }
-                )
+    def post(self, request):
+        usr_obj = request.user
+        logout(request)
+        try:
+            user_info = UserInfo.objects.get(user=usr_obj)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-def signup_auth(request):
-    logger.log(severity['INFO'], 'SIGNUP AUTH')
-    
-    if request.method == 'POST':
-        username = request.POST.get("username")
-        password1 = request.POST.get("password1")
-        password2 = request.POST.get("password2")
-    
-        if password1 != password2:
-           return JsonResponse({'success': False, 'error': 'Passwords do not match', 'redirect': 'signup/'}, status=400)
+        api_instance = api.get_api_instance(request.user, user_info.container_name)
+        if api_instance:
+            api_instance.delete_container()
+            api.del_api_instance()
+            return Response({'success': True}, status=status.HTTP_200_OK)
+        else:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# This module contains DRF-style API endpoints and is the canonical API surface for the
+# `main` app. Template/UI views were previously separate; those remain in templates if
+# needed for the frontend, but API handlers live here.
+
+
+# Deprecated: UI template view, not needed for DRF API
+
+
+class SignupAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = SignupSerializer(data=request.data)
+        if not serializer.is_valid():
+            # normalize serializer errors to {'error': message}
+            errors = serializer.errors
+            if 'non_field_errors' in errors:
+                message = errors['non_field_errors'][0]
+            else:
+                # pick first field error
+                first_key = next(iter(errors))
+                message = errors[first_key][0]
+            return Response({'success': False, 'error': str(message)}, status=status.HTTP_400_BAD_REQUEST)
+
+        username = serializer.validated_data['username']
+        password1 = serializer.validated_data['password1']
+        email = serializer.validated_data.get('email_id')
+
         if utils.user_exists(username):
-            return JsonResponse({'success': False, 'error': 'Username already exists', 'redirect': 'signup/'}, status=400)
+            return Response({'success': False, 'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.create_user(username=username,password=password1)
+        user = User.objects.create_user(username=username, password=password1, email=email)
         user.save()
         user_info, created = UserInfo.objects.get_or_create(
             user=user,
             defaults = {
                 'user_name': username,
-                'subscription_type': dict(SUBSCRIPTION_CHOICES)[DEFAULT_SUBSCRIPTION_AT_INIT],  # Default subscription type
+                'subscription_type': dict(SUBSCRIPTION_CHOICES)[DEFAULT_SUBSCRIPTION_AT_INIT],
                 'container_name': utils.assign_container(username),
-                'storage_quota_bytes': dict(SUBSCRIPTION_VALUES)[DEFAULT_SUBSCRIPTION_AT_INIT],  # Default storage quota
-                'storage_used_bytes': 0,  # Default storage used
+                'storage_quota_bytes': dict(SUBSCRIPTION_VALUES)[DEFAULT_SUBSCRIPTION_AT_INIT],
+                'storage_used_bytes': 0,
                 'dob' : None,
-                'email_id' : request.POST.get("email_id")
+                'email_id' : email
             }
         )
         if created:
             api_instance = api.get_api_instance(user, utils.assign_container(username))
             if api_instance:
-                # Add a Container for this new User
                 api_instance.add_container(user)
-                
-                logger.log(severity['INFO'], 'USER CONTAINER CREATED FOR USER: {}'.format(username))
-                return redirect('/login/')    
+                return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
             else:
-                #delete user if instantiation failed
                 user.delete()
                 user_info.delete()
-                return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
+                return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
-            return JsonResponse({'success': False, 'error': 'User already exists', 'redirect': '/'}, status=400)
-    else:
-        return JsonResponse({'success': False, 'error': 'Invalid request method', 'redirect': '/'}, status=400)
+            return Response({'success': False, 'error': 'User already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-def user_login(request):
-    logger.info('LOGIN')
-    return render(request, 'user/login.html')
+
+# Deprecated: UI template view, not needed for DRF API
 
 
-def login_auth(request):
-    logger.log(severity['INFO'], 'LOGIN AUTH')
 
-    if request.user.is_authenticated:        
-        logger.log(severity['INFO'], 'User: {} already logged in'.format(request.user.username))
-        return home(request)
-    
-    if request.method == 'POST':
-        username = request.POST.get("username")
-        password = request.POST.get("password")
+class LoginAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
 
-        user = django_authenticate(username=username, password=password)
-        if user is not None and user.is_superuser:
-            login(request, user)
-            logger.log(severity['INFO'], 'ADMIN LOGIN SUCCESS')
-            return JsonResponse({'success': True, 'redirect': '/admin/'}, status=200)
-        elif username and user is not None:
-            # Proceed with normal user login below
-            pass
-        elif username:
-            logger.log(severity['ERROR'], 'ADMIN LOGIN FAILED')
-            return JsonResponse({'success': False, 'error': 'Invalid admin credentials', 'redirect': '/login/'}, status=400)
-            
-        logger.log(severity['INFO'], 'USER:{} '.format(username))
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            errors = serializer.errors
+            first_key = next(iter(errors))
+            message = errors[first_key][0]
+            return Response({'success': False, 'error': str(message)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not username or not password:
-            return JsonResponse({'success': False, 'error': 'Missing username or password', 'redirect': '/'}, status=400)
+        username = serializer.validated_data['username']
+        password = serializer.validated_data['password']
 
         if not utils.username_valid(username):
-            return JsonResponse({'success': False, 'error': 'Invalid username', 'redirect': '/'}, status=400)
+            return Response({'success': False, 'error': 'Invalid username'}, status=status.HTTP_400_BAD_REQUEST)
 
         if utils.user_exists(username):
             user = authenticate(username=username, password=password)
             if user:
                 login(request, user)
-                return JsonResponse({'success': True, 'redirect': '/'})
+                # create or get token for API clients
+                token, _ = Token.objects.get_or_create(user=user)
+                return Response({'success': True, 'token': token.key}, status=status.HTTP_200_OK)
             else:
-                #Django authentication failed! Incorrect password
-                return JsonResponse({'success': False, 'error': 'Invalid credentials', 'redirect': '/'}, status=400)
-        else:
-            #Django authentication failed! Incorrect password
-            return JsonResponse({'success': False, 'error': 'Invalid credentials', 'redirect': '/'}, status=400)
-    else:
-        return JsonResponse({'success': False, 'error': 'Invalid request method', 'redirect': '/'}, status=400)
+                return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
 
-@login_required
-def user_logout(request):
-    logger.log(severity['INFO'], 'LOGOUT USER {}'.format(request.user.username))
-    if request.user.is_authenticated:
-        auth.logout(request)
-        # delete singleton object allocated for the user 
+
+class LogoutAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        # remove session and revoke token for API clients
+        logout(request)
+        try:
+            Token.objects.filter(user=request.user).delete()
+        except Exception:
+            # don't fail logout if token deletion has issues; proceed to cleanup
+            pass
         api.del_api_instance()
-        return home(request)
-    return JsonResponse({'success': False, 'error': 'User not authenticated', 'redirect': '/'}, status=400)
+        return Response({'success': True}, status=status.HTTP_200_OK)
 
 
-@login_required
-def add_blob(request):
-    logger.log(severity['INFO'], 'ADD BLOB')
-    user_info = UserInfo.objects.get(user=request.user)
-    #get blob details from form
-    if AZURE_API_DISABLE:
-        #take the text value from the form
-        uploaded_file = request.FILES.get("blob_file")
-        file_name = request.GET.get('file_name')
-    else:
-        uploaded_file = request.FILES['blob_file']
-        file_name = request.GET.get('file_name')
 
-    logger.log(severity['INFO'], 'BLOB NAME : {}'.format(file_name))
-    
-    if file_name is None:
-        return JsonResponse({'success': False, 'error': 'Missing file name', 'redirect': '/'}, status=400)
+class AddBlobAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-    logger.log(severity['INFO'], 'BLOB NAME : {}'.format(file_name))
-
-    #get size of file to be uploaded
-    file_size_bytes = 100
-    
-    #check if the new blob exceeds data_storage_limit
-    if user_info.storage_used_bytes + file_size_bytes >= user_info.storage_quota_bytes:
-        return JsonResponse({'success': False, 'error': 'Storage Exceeded! Upload Failed', 'redirect': '/'}, status=400)
-
-    #update the total storage for this user in user_info DB
-    user_info.storage_used_bytes += file_size_bytes
-    
-    api_instance = api.get_api_instance(request.user, user_info.container_name)
-    if api_instance:
-        api_instance.create_blob(file_name)
-    else:
-        return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
-    return home(request)
-
-
-@login_required
-def delete_blob(request, blob_name):
-    logger.log(severity['INFO'], 'DELETE BLOB')
-    if request.method == 'POST':
-        logger.log(severity['INFO'], 'BLOB NAME : {}'.format(blob_name))
-        
-        #update total size in User Info DB
+    def post(self, request):
         user_info = UserInfo.objects.get(user=request.user)
-        
-        #delete from Blob DB
+        file_name = request.data.get('file_name') or request.query_params.get('file_name')
+        if not file_name:
+            return Response({'success': False, 'error': 'Missing file name'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file_size_bytes = 100
+        if user_info.storage_used_bytes + file_size_bytes >= user_info.storage_quota_bytes:
+            return Response({'success': False, 'error': 'Storage Exceeded! Upload Failed'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_info.storage_used_bytes += file_size_bytes
+        user_info.save()
+
         api_instance = api.get_api_instance(request.user, user_info.container_name)
         if api_instance:
-            user_info.storage_used_bytes -= api_instance.get_blob_size(blob_name)
-            api_instance.delete_blob(blob_name)       
+            api_instance.create_blob(file_name)
+            return Response({'success': True}, status=status.HTTP_200_OK)
         else:
-            return JsonResponse({'success': False, 'error': 'API Instantiation Failed', 'redirect': '/'}, status=500)
-    return home(request)
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@login_required
-def home(request):
-    logger.log(severity['INFO'], 'HOME')
-    user_info = UserInfo.objects.filter(user=request.user).values()
-    api_instance = api.get_api_instance(request.user, user_info[0]['container_name'])
 
-    if user_info.count() != 0:
-        blob_list = api_instance.list_blob()
-        return render(
-                    request, 
-                    'main/sample.html', 
-                    {
-                        'blobQuery': blob_list,
-                        'username': request.user.username,
-                        'json_status': {'status': 'success'}
-                    }
-                )
-    return JsonResponse({'success': False, 'error': 'User info not found', 'redirect': '/login/'}, status=400)
+class DeleteBlobAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, blob_name=None):
+        user_info = UserInfo.objects.get(user=request.user)
+        api_instance = api.get_api_instance(request.user, user_info.container_name)
+        if api_instance:
+            size = api_instance.get_blob_size(blob_name)
+            user_info.storage_used_bytes = max(0, user_info.storage_used_bytes - size)
+            user_info.save()
+            api_instance.delete_blob(blob_name)
+            return Response({'success': True}, status=status.HTTP_200_OK)
+        else:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class HomeAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user_info_qs = UserInfo.objects.filter(user=request.user).values()
+        if user_info_qs.count() == 0:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = api.get_api_instance(request.user, user_info_qs[0]['container_name'])
+        blob_list = api_instance.list_blob() if api_instance else []
+        return Response({'success': True, 'blobs': blob_list, 'username': request.user.username}, status=status.HTTP_200_OK)

@@ -1,6 +1,8 @@
-from django.test import TestCase, Client
+from django.test import TestCase
+from rest_framework.test import APIClient
 from django.urls import reverse
 from django.contrib.auth.models import User
+from main.models import UserInfo
 
 import az_intf.api as az_api
 
@@ -28,7 +30,7 @@ class AuthTests(TestCase):
         self._orig_get_api = getattr(az_api, 'get_api_instance', None)
         az_api.get_api_instance = lambda *a, **k: _DummyAPI()
 
-        self.client = Client()
+        self.client = APIClient()
         self.signup_url = reverse('auth_signup')
         self.login_url = reverse('auth_login')
         self.logout_url = reverse('logout')
@@ -51,8 +53,8 @@ class AuthTests(TestCase):
             'password1': self.user_data['password'],
             'password2': self.user_data['password'],
             'email_id': self.user_data['email_id']
-        }, follow=True)
-        self.assertEqual(response.status_code, 200)
+        }, format='json')
+        self.assertIn(response.status_code, (200, 201))
         self.assertTrue(User.objects.filter(username=self.user_data['username']).exists())
 
     def test_signup_duplicate_username(self):
@@ -63,7 +65,7 @@ class AuthTests(TestCase):
             'password1': self.user_data['password'],
             'password2': self.user_data['password'],
             'email_id': 'newemail@example.com'
-        })
+        }, format='json')
         self.assertNotEqual(response.status_code, 200)
         self.assertIn('error', response.json())
 
@@ -74,7 +76,7 @@ class AuthTests(TestCase):
             'password1': self.user_data['password'],
             'password2': self.user_data['password'] + '_diff',
             'email_id': self.user_data['email_id']
-        })
+        }, format='json')
         self.assertNotEqual(response.status_code, 200)
         self.assertIn('error', response.json())
 
@@ -84,7 +86,7 @@ class AuthTests(TestCase):
         response = self.client.post(self.login_url, {
             'username': self.user_data['username'],
             'password': self.user_data['password']
-        })
+        }, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json().get('success', False))
 
@@ -94,7 +96,7 @@ class AuthTests(TestCase):
         response = self.client.post(self.login_url, {
             'username': self.user_data['username'],
             'password': 'wrongpassword'
-        })
+        }, format='json')
         self.assertNotEqual(response.status_code, 200)
         self.assertIn('error', response.json())
 
@@ -103,7 +105,34 @@ class AuthTests(TestCase):
         User.objects.create_user(username=self.user_data['username'], password=self.user_data['password'], email=self.user_data['email'])
         logged_in = self.client.login(username=self.user_data['username'], password=self.user_data['password'])
         self.assertTrue(logged_in)
-        response = self.client.post(self.logout_url, follow=True)
+        response = self.client.post(self.logout_url, format='json')
         self.assertIn(response.status_code, (200, 302))
         resp_after = self.client.get(reverse('home'))
         self.assertNotEqual(resp_after.status_code, 200)
+
+    def test_token_access_home(self):
+        """Login returns token; token can be used to access protected `home`"""
+        user = User.objects.create_user(username=self.user_data['username'], password=self.user_data['password'], email=self.user_data['email'])
+        # create associated UserInfo so HomeAPIView can find container_name and quotas
+        UserInfo.objects.create(
+            user=user,
+            user_name=self.user_data['username'],
+            subscription_type='STARTER',
+            container_name='test-container',
+            storage_quota_bytes=1024 * 1024,
+            storage_used_bytes=0,
+            email_id=self.user_data['email']
+        )
+        # obtain token via API login
+        resp = self.client.post(self.login_url, {'username': self.user_data['username'], 'password': self.user_data['password']}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        token = body.get('token')
+        self.assertIsNotNone(token)
+
+        # use token to access home
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + token)
+        resp2 = self.client.get(reverse('home'))
+        self.assertEqual(resp2.status_code, 200)
+        data = resp2.json()
+        self.assertTrue(data.get('success', False))

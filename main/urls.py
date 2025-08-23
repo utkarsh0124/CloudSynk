@@ -1,15 +1,17 @@
-from django.urls import path, include
+from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("", views.home , name="home"),
-    path("logout/", views.user_logout , name="logout"),
-    path("login/", views.user_login, name="login"),
-    path("auth_login/", views.login_auth , name="auth_login"),
-    path("signup/", views.user_signup , name="signup"),
-    path("auth_signup/", views.signup_auth , name="auth_signup"),
-    path("rmUser/", views.remove_user, name="user_remove"),
-    path("deleteFile/<str:blob_name>/", views.delete_blob , name="delete"),
-    path("addFile/", views.add_blob , name="add"),
-    path("", include("django.contrib.auth.urls")),
+    path("", views.HomeAPIView.as_view(), name="home"),
+    path("logout/", views.LogoutAPIView.as_view(), name="logout"),
+    path("login/", views.LoginAPIView.as_view(), name="login"),
+    path("auth_login/", views.LoginAPIView.as_view(), name="auth_login"),
+    path("signup/", views.SignupAPIView.as_view(), name="signup"),
+    path("auth_signup/", views.SignupAPIView.as_view(), name="auth_signup"),
+    path("rmUser/", views.RemoveUserAPIView.as_view(), name="user_remove"),
+    path("deleteFile/<str:blob_name>/", views.DeleteBlobAPIView.as_view(), name="delete"),
+    path("addFile/", views.AddBlobAPIView.as_view(), name="add"),
+    path("api/signup/", views.SignupAPIView.as_view(), name="api_signup"),
+    path("api/login/", views.LoginAPIView.as_view(), name="api_login"),
+    path("api/logout/", views.LogoutAPIView.as_view(), name="api_logout"),
 ]

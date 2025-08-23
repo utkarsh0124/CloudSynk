@@ -51,6 +51,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
+# Enable DRF token auth app so Token model/migrations are available
+INSTALLED_APPS += [
+    'rest_framework.authtoken',
+]
+
 CRISPY_ALLOWED_TEMPLATE_PACKs = 'bootstrap5'
 CRISPY_TEMPLATE_PACK = 'bootstrap5'
 
@@ -136,3 +141,13 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Django REST Framework defaults: allow Session auth (for browser-based flows)
+# and Token auth (for API clients). Individual views may override.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+}
