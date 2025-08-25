@@ -68,7 +68,10 @@
           </svg>
         </div>
         <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]">
-          <a href="{% url 'logout' %}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Logout</a>
+          <form action="{% url 'logout' %}" method="post" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0">Logout</button>
+          </form>
         </div>
       </div>
       <script>
@@ -129,12 +132,12 @@
       <div class="flex-1 overflow-y-auto bg-gray-50 p-8">
       {% comment %} <h2 class="text-2xl font-semibold mb-6">Your Files</h2> {% endcomment %}
       <div class="flex justify-start mb-6 items-center space-x-4">
-        <form id="upload-form" action="{% url 'add' %}" method="post" enctype="multipart/form-data" class="relative">
+        <form id="upload-form" enctype="multipart/form-data" class="relative">
         {% csrf_token %}
         <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
           <i class="fas fa-plus mr-2"></i>
           <span>Add File</span>
-          <input id="file-upload" name="blob_file" type="file" class="hidden" onchange="document.getElementById('upload-form').submit();" />
+          <input id="file-upload" name="blob_file" type="file" class="hidden" />
         </label>
         </form>
         <!-- View Toggle Buttons -->
@@ -148,7 +151,7 @@
         </div>
       </div>
       <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for file in blobQuery %}
+        {% for file in blobs %}
         <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
           <div class="flex items-center mb-2">
           <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
@@ -208,7 +211,7 @@
       </style>
       <!-- Hidden list view markup for toggling -->
       <div id="file-list-container-list" style="display:none;">
-        {% for file in blobQuery %}
+        {% for file in blobs %}
         <div class="file-item-list">
           <i class="fas fa-file-alt text-blue-500 text-2xl"></i>
           <div class="file-info">

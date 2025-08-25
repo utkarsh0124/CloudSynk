@@ -49,13 +49,43 @@ sudo chown -R $(whoami):$(whoami) /workspace/StorageApp/log
 chmod -R u+w /workspace/StorageApp/log
 ```
 
-Deprecation note
-----------------
-`main/views.py` remains for backward compatibility but is marked deprecated. Plan to remove it once all consumers and frontends are using the DRF endpoints.
+Using the `/api/` endpoints from JS
+----------------------------------
 
-Contact / next steps
---------------------
-- I can remove `main/views.py` and the old templates after a stabilization period.
-- I can add more DRF-focused tests (blobs, user removal, edge cases) or add a CI matrix for Python versions.
+This project exposes API-friendly endpoints under `/api/` (for example `/api/login/`, `/api/signup/`, `/api/addFile/`). These routes are intended for browser XHR/fetch calls and are still protected by session cookies and CSRF.
 
-Thanks — if you'd like, I can open a PR with these changes and enable the workflow for branch protection.
+Basic usage notes:
+
+- Send the CSRF token with state-changing requests (POST/PUT/DELETE). In templates the token is available in a hidden input named `csrfmiddlewaretoken`.
+- Mark requests as XHR so the server returns JSON rather than HTML. Include the header `X-Requested-With: XMLHttpRequest` and `Accept: application/json`.
+- Example (fetch):
+
+```js
+const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+fetch('/api/login/', {
+	method: 'POST',
+	headers: {
+		'Content-Type': 'application/json',
+		'Accept': 'application/json',
+		'X-Requested-With': 'XMLHttpRequest',
+		'X-CSRFToken': csrftoken,
+	},
+	credentials: 'same-origin',
+	body: JSON.stringify({ username: 'me', password: 'secret' })
+}).then(r => r.json()).then(console.log)
+```
+
+If you prefer jQuery `$.ajax`, ensure the same headers are provided (see `main/static/js/login.js` for an example). Keep CORS disabled unless you intentionally need cross-origin clients.
+
+Feature flag: ENABLE_API_ENDPOINTS
+---------------------------------
+
+The project uses an environment-driven feature flag `ENABLE_API_ENDPOINTS` to control whether explicit `/api/` routes are registered. Default behavior is conservative: the flag is `false` unless set in the environment. During development the code will still enable APIs when `DEBUG=True` to keep things convenient, but you can control the flag explicitly in any environment.
+
+To run tests or start the dev server with API endpoints enabled for the duration of the command, use the helper script:
+
+```bash
+scripts/run_tests_with_api.sh
+```
+
+This script sets `ENABLE_API_ENDPOINTS=true`, runs `manage.py test`, then restores the environment.

@@ -4,10 +4,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="stylesheet" href="{% static '/css/login.css' %}">
 <script src="{% static 'js/login.js' %}"></script>
+<link rel="icon" href="{% static '/media/CloudSynk.svg' %}" type="image/svg+xml">
 
 {{form|crispy}}
   <!-- Modal Content -->
-  <form class="modal-content animate" action="/auth_login/" method="post" enctype= multipart/form-data>
+  <form class="modal-content animate" action="/login/" method="post" enctype= multipart/form-data>
     {% csrf_token %}
     <div class="container">
       <input type="text" placeholder="Enter Username" name="username">
@@ -23,9 +24,9 @@
   
   <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
 
-  <form action="/logout/" method="post">
+  <form action="/signup/" method="get" enctype= multipart/form-data>
       {% csrf_token %}
-      <button type="submit" value="Logout">Log Out</button>
+      <button type="submit" value="signup">Sign up</button>
   </form>
 
 

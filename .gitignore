@@ -6,3 +6,5 @@ django_cred.json
 db.sqlite3
 log/
 .storage-env/
+node_modules/
+reports/
