@@ -4,22 +4,17 @@ from datetime import datetime
 import inspect
 import os
 # import sys
-
-
 class Logger:
     _instance = None
-
     @classmethod
     def init_logger(cls):
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s::[%(levelname)s]::[%(module)s.py]::[%(funcName)s::%(lineno)d]::%(message)s')
-
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.ERROR)
         console_handler.setFormatter(formatter)

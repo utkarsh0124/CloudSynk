@@ -188,16 +188,10 @@ class SampleBlob:
             self.__container_name: set([blob_obj.blob_name for blob_obj in blob_table.objects.filter(user_id=self.__user_obj_info.user)])
         }  # dict<container_name:str, set:(blob_name:str)> -> all blobs that exist in the container for current user
 
-        print("Initial Container Dict : ", self.__container_blob_dict)
-        print("Initial Container list size : ", len(self.__container_blob_dict[self.__container_name]))
-
         logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
 
     def blob_exists(self, blob_name:str):
         if self.__container_name in self.__container_blob_dict.keys():
-            print("Container list : ")
-            for blob in self.__container_blob_dict[self.__container_name]:
-                print(blob)
             return blob_name in [blob for blob in self.__container_blob_dict[self.__container_name]]
         else:
             logger.log(severity['INFO'], 'BLOB DOES NOT EXIST : {}'.format(blob_name))
@@ -236,7 +230,7 @@ class SampleBlob:
         if new_blob_entry.blob_id:
             self.__add_to_dict(new_blob_entry.blob_name)
         else:
-            print("blob id not found. cannot add to dict! : ", blob_name)
+            logger.log(severity['ERROR'], 'BLOB ID NOT FOUND CANNOT ADD TO DICT : {}'.format(blob_name))
 
     def __delete_from_db(self, blob_name:str):
         blob_obj = blob_table.objects.get(blob_name=blob_name, user_id=self.__user_obj_info.user)

@@ -1,0 +1,19 @@
+{
+  "name": "storageapp-frontend-tests",
+  "version": "1.0.0",
+  "description": "Dev deps for running frontend Jest tests for StorageApp",
+  "private": true,
+  "scripts": {
+    "test": "jest --runInBand"
+  },
+  "jest": {
+    "testEnvironment": "jsdom"
+  },
+  "devDependencies": {
+    "jest": "^29.6.1",
+    "jest-fetch-mock": "^3.0.3",
+    "jquery": "^3.7.1",
+    "jsdom": "^22.1.0",
+    "jest-environment-jsdom": "^29.6.1"
+  }
+}

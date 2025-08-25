@@ -1,1 +1,1 @@
-# Make this directory a Python package so Django can import submodules for test discovery
+# Make this directory a Python package so Django test discovery will find tests here
