@@ -70,6 +70,20 @@ if [ -f package.json ]; then
 			fi
 		else
 			echo "npm not available on PATH. To install frontend dependencies, install Node.js and npm and then run:\n  npm ci  # if you have package-lock.json\n  or\n  npm install"
+			# Try a best-effort apt-get install for Node.js/npm if running on Debian/Ubuntu and sudo is available
+			if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+				echo "Attempting to install Node.js and npm via apt-get (requires sudo)..."
+				if sudo apt-get update && sudo apt-get install -y nodejs npm; then
+					echo "Node.js/npm installed via apt-get. Installing frontend packages..."
+					if [ -f package-lock.json ]; then
+						npm ci || echo "npm ci failed. You can run 'npm ci' manually to inspect errors."
+					else
+						npm install || echo "npm install failed. You can run 'npm install' manually to inspect errors."
+					fi
+				else
+					echo "Automatic apt-get install of nodejs/npm failed or was not permitted. Please install Node.js and npm manually."
+				fi
+			fi
 		fi
 	fi
 fi

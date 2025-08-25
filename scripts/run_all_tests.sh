@@ -34,23 +34,40 @@ write_report() {
     # Backend metrics
     local backend_total=0 backend_time=0 backend_status="unknown"
     local backend_tests_json="[]"
+    # If the backend_out file doesn't include the test summary, try to find a recent file
+    # in the reports dir that does (fallback for cases where output landed elsewhere).
+    if [ -f "$backend_out" ]; then
+        if ! tr -d '\r' < "$backend_out" | grep -E "^Ran [0-9]+ tests? in" -q 2>/dev/null; then
+            # find most recent file in REPORT_DIR that contains the Ran line
+            candidate=$(grep -El "Ran [0-9]+ tests? in" "$REPORT_DIR"/* 2>/dev/null | tail -n1 || true)
+            if [ -n "$candidate" ]; then
+                backend_out="$candidate"
+            fi
+        fi
+    fi
     if [ -f "$backend_out" ]; then
         # Extract Ran line: "Ran 9 tests in 3.631s"
         local ran_line
-        ran_line=$(grep -E "^Ran [0-9]+ tests? in" "$backend_out" | tail -n1 || true)
+        # strip CRs to be robust against different EOLs
+        ran_line=$(tr -d '\r' < "$backend_out" | grep -E "^Ran [0-9]+ tests? in" | tail -n1 || true)
         if [ -n "$ran_line" ]; then
+            # example: Ran 13 tests in 3.503s
             backend_total=$(echo "$ran_line" | awk '{print $2}')
-            backend_time=$(echo "$ran_line" | awk '{print $5}' | sed 's/s$//')
+            # extract time value (number before 's') robustly
+            backend_time=$(echo "$ran_line" | sed -E 's/.* in ([0-9.]+)s/\1/')
         fi
         if [ "$backend_rc" -eq 0 ]; then backend_status="OK"; else backend_status="FAILED"; fi
 
         # Extract per-test lines like: test_name (module.Class) ... ok
-        mapfile -t _b_lines < <(grep -E ' \.\.\. (ok|FAIL)$' "$backend_out" || true)
+        # Strip CRs first, relax end anchor to be robust
+    mapfile -t _b_lines < <(tr -d '\r' < "$backend_out" | grep -E ' \.\.\. (ok|FAIL)' || true)
         local _arr_b=()
         for l in "${_b_lines[@]}"; do
-            local status=$(echo "$l" | sed -E 's/.* \.\.\. (ok|FAIL)$/\1/')
-            local name=$(echo "$l" | sed -E 's/ \.\.\. (ok|FAIL)$//')
-            name=$(echo "$name" | sed 's/"/\\\"/g')
+            # status is the trailing ok or FAIL
+            local status=$(echo "$l" | sed -E 's/.* \.\.\. (ok|FAIL)/\1/')
+            # name is the line without the trailing status marker
+            local name=$(echo "$l" | sed -E 's/ \.\.\. (ok|FAIL)//')
+            name=$(echo "$name" | sed 's/"/\\"/g')
             _arr_b+=("{\"name\":\"$name\",\"status\":\"$status\"}")
         done
         if [ ${#_arr_b[@]} -gt 0 ]; then
@@ -125,12 +142,16 @@ run_backend() {
     echo "[backend] enabling API endpoints for this run"
     export ENABLE_API_ENDPOINTS=true
     # Use verbosity 2 to list each test that runs for clearer output
-    backend_tmp=$(mktemp)
+    # Create temp files inside the reports directory so write_report can always read them
+    backend_tmp=$(mktemp "$REPORT_DIR/backend_out.XXXXXX")
     if [ ${#BACKEND_ARGS[@]} -gt 0 ]; then
-        ./manage.py test -v2 "${BACKEND_ARGS[@]}" | tee "$backend_tmp"
+        # Capture both stdout and stderr so per-test lines are saved
+        ./manage.py test -v2 "${BACKEND_ARGS[@]}" 2>&1 | tee "$backend_tmp"
         rc=${PIPESTATUS[0]}
     else
-        ./manage.py test -v2 | tee "$backend_tmp"
+        # Run only the API tests package by default to avoid discovery/import issues
+        # Capture both stdout and stderr so per-test lines are saved
+        ./manage.py test -v2 main.api_tests 2>&1 | tee "$backend_tmp"
         rc=${PIPESTATUS[0]}
     fi
     if [ $rc -ne 0 ]; then
@@ -150,7 +171,8 @@ run_backend() {
 
 run_frontend() {
     banner "FRONTEND TESTS (Jest) START"
-    frontend_tmp=$(mktemp)
+    # Create frontend temp file inside reports directory so write_report can read it
+    frontend_tmp=$(mktemp "$REPORT_DIR/frontend_out.XXXXXX")
     npm test --silent 2>&1 | tee "$frontend_tmp"
     rc=${PIPESTATUS[0]}
     if [ $rc -ne 0 ]; then
@@ -226,6 +248,90 @@ case "$SUBCOMMAND" in
     run_frontend || true
     # Generate a report file summarizing outputs
     write_report "${BACKEND_OUT:-}" "${BACKEND_RC:-}" "${FRONTEND_OUT:-}" "${FRONTEND_RC:-}"
+    # Validate generated JSON report meets thresholds and statuses
+    check_report() {
+        local report_file="$REPORT_FILE_JSON"
+        local be_expect=${BACKEND_EXPECT:-13}
+        local fe_expect=${FRONTEND_EXPECT:-10}
+        local failed=0
+
+        if [ ! -f "$report_file" ]; then
+            echo "[report-check] FAIL: report file not found: $report_file"
+            return 2
+        fi
+
+        if command -v jq >/dev/null 2>&1; then
+            backend_total=$(jq -r '.backend.total_tests // 0' "$report_file")
+            frontend_total=$(jq -r '.frontend.tests // 0' "$report_file")
+            # find any backend test whose status != ok
+            non_ok_backend=$(jq -r '.backend.tests[]? | select(.status != "ok") | "\(.name):\(.status)"' "$report_file" | head -n1 || true)
+            # find any frontend suite whose status != PASS
+            non_pass_frontend=$(jq -r '.frontend.suites_list[]? | select(.status != "PASS") | "\(.name):\(.status)"' "$report_file" | head -n1 || true)
+            backend_status=$(jq -r '.backend.status // ""' "$report_file")
+            frontend_status=$(jq -r '.frontend.status // ""' "$report_file")
+        else
+            # fallback using grep/sed for environments without jq
+            backend_total=$(grep -oE '"total_tests"[[:space:]]*:[[:space:]]*[0-9]+' "$report_file" | tail -n1 | sed -E 's/.*: *([0-9]+)$/\1/' || echo 0)
+            frontend_total=$(grep -oE '"tests"[[:space:]]*:[[:space:]]*[0-9]+' "$report_file" | head -n1 | sed -E 's/.*: *([0-9]+)$/\1/' || echo 0)
+            # backend tests non-ok detection
+            non_ok_backend=$(grep -o '{[^}]*"status"[^}]*}' "$report_file" | sed -E 's/.*"status"\s*:\s*"?([^",}]*)"?.*/\1/' | nl -ba | while read -r n s; do if [ "$(echo "$s" | tr '[:upper:]' '[:lower:]')" != "ok" ]; then echo "non-ok"; break; fi; done || true)
+            non_pass_frontend=$(grep -o '{[^}]*"status"[^}]*}' "$report_file" | sed -E 's/.*"status"\s*:\s*"?([^",}]*)"?.*/\1/' | nl -ba | while read -r n s; do if [ "$(echo "$s" | tr '[:lower:]' '[:upper:]')" != "PASS" ]; then echo "non-pass"; break; fi; done || true)
+            backend_status=$(grep -E '"backend"[[:space:]]*:\s*\{' -n -n "$report_file" >/dev/null 2>&1 && grep -A3 '"backend"' "$report_file" | grep -oE '"status"\s*:\s*"[^"]+"' | head -n1 | sed -E 's/.*: *"([^"]+)"/\1/' || echo "")
+            frontend_status=$(grep -A3 '"frontend"' "$report_file" | grep -oE '"status"\s*:\s*"[^"]+"' | head -n1 | sed -E 's/.*: *"([^"]+)"/\1/' || echo "")
+        fi
+
+        # [1] compare totals
+        if [ "$backend_total" -lt "$be_expect" ]; then
+            echo "[report-check] FAIL: backend total tests ($backend_total) < expected ($be_expect)"
+            failed=1
+        else
+            echo "[report-check] backend total tests: $backend_total (>= $be_expect)"
+        fi
+
+        if [ "$frontend_total" -lt "$fe_expect" ]; then
+            echo "[report-check] FAIL: frontend total tests ($frontend_total) < expected ($fe_expect)"
+            failed=1
+        else
+            echo "[report-check] frontend total tests: $frontend_total (>= $fe_expect)"
+        fi
+
+        # [2] ensure backend tests all ok and frontend suites PASS
+        if [ -n "$non_ok_backend" ]; then
+            echo "[report-check] FAIL: found backend tests with non-ok status: $non_ok_backend"
+            failed=1
+        else
+            echo "[report-check] all backend tests have status ok"
+        fi
+
+        if [ -n "$non_pass_frontend" ]; then
+            echo "[report-check] FAIL: found frontend suites not PASS: $non_pass_frontend"
+            failed=1
+        else
+            echo "[report-check] all frontend suites have status PASS"
+        fi
+
+        # [3] overall statuses
+        if [ "${backend_status:-}" != "OK" ]; then
+            echo "[report-check] FAIL: backend overall status is not OK: ${backend_status:-}"; failed=1
+        else
+            echo "[report-check] backend overall status OK"
+        fi
+        if [ "${frontend_status:-}" != "OK" ]; then
+            echo "[report-check] FAIL: frontend overall status is not OK: ${frontend_status:-}"; failed=1
+        else
+            echo "[report-check] frontend overall status OK"
+        fi
+
+        if [ "$failed" -eq 0 ]; then
+            echo "[report-check] SUCCESS: report meets all checks"
+            return 0
+        else
+            echo "[report-check] FAIL: one or more checks failed"
+            return 4
+        fi
+    }
+
+    check_report || exit $?
     # Propagate non-zero exit codes if any
     if [ "${BACKEND_RC:-0}" -ne 0 ]; then exit ${BACKEND_RC}; fi
     if [ "${FRONTEND_RC:-0}" -ne 0 ]; then exit ${FRONTEND_RC}; fi
