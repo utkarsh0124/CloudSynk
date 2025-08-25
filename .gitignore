@@ -7,4 +7,4 @@ db.sqlite3
 log/
 .storage-env/
 node_modules/
-reports/
+scripts/reports/

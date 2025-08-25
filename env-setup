@@ -1,4 +1,6 @@
-BASE_DIR=${PWD}/
+#!/bin/bash
+
+export BASE_DIR=${PWD}/
 #PYTHON_VERSION="Python 3.*"
 
 source ../.bashrc
@@ -38,4 +40,38 @@ export PYTHONPATH=${PWD}/../:$PYTHONPATH
 
 echo "Storage-env Virtual Environment activated"
 echo 
+# Simple arg parsing: support --no-node to skip Node dependency install when sourcing
+# Example: source env-setup --no-node
+NO_NODE=0
+for arg in "$@"; do
+	case "$arg" in
+		--no-node)
+			NO_NODE=1
+			;;
+		--help|-h)
+			echo "Usage: source env-setup [--no-node]"
+			return 0 2>/dev/null || exit 0
+			;;
+	esac
+done
+
+if [ -f package.json ]; then
+	if [ "$NO_NODE" = "1" ]; then
+		echo "SKIPPING: Node dependency installation (--no-node)"
+	else
+		if command -v npm >/dev/null 2>&1; then
+			echo "npm found: installing frontend dependencies..."
+			if [ -f package-lock.json ]; then
+				echo "Using package-lock.json -> running: npm ci"
+				npm ci || echo "npm ci failed. You can run 'npm ci' manually to inspect errors."
+			else
+				echo "No package-lock.json found -> running: npm install"
+				npm install || echo "npm install failed. You can run 'npm install' manually to inspect errors."
+			fi
+		else
+			echo "npm not available on PATH. To install frontend dependencies, install Node.js and npm and then run:\n  npm ci  # if you have package-lock.json\n  or\n  npm install"
+		fi
+	fi
+fi
+
 echo "DONE"

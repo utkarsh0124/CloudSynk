@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "BASE_DIR : ${BASE_DIR}"
+
 # optional overrides:
 : "${ADMIN_USERNAME:=admin}"
 : "${ADMIN_EMAIL:=admin@example.com}"

@@ -8,25 +8,21 @@ set -euo pipefail
 #   ./scripts/run_all_tests.sh frontend   # run only frontend (Jest)
 # Additional args are passed to the underlying test runner (manage.py test args for backend).
 
-if [ -n "${ROOT_DIR:-}" ]; then
-    ROOT_DIR="${ROOT_DIR}"
-elif [ -n "${BASE_DIR:-}" ]; then
+ROOT_DIR=""
+if [ -n "${BASE_DIR:-}" ]; then
     ROOT_DIR="${BASE_DIR}"
-elif [ -d "$(dirname "$0")/.." ]; then
-    ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-    echo "Warning: Neither ROOT_DIR nor BASE_DIR set, using script parent directory: $ROOT_DIR"
 else
-    echo "Error: ROOT_DIR is not set. Please set BASE_DIR or ROOT_DIR."
+    echo "ERROR: BASE_DIR not set. Aborting!"
     exit 1
 fi
-
+echo "BASE_DIR : ${BASE_DIR}"
 cd "$ROOT_DIR"
 
 timestamp() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 banner() { printf "\n==== %s - %s ====\n" "$(timestamp)" "$1"; }
 
 # Prepare reports directory and report file
-REPORT_DIR="$ROOT_DIR/reports"
+REPORT_DIR="$ROOT_DIR/scripts/reports"
 mkdir -p "$REPORT_DIR"
 REPORT_TS=$(date -u +"%Y%m%dT%H%M%SZ")
 REPORT_FILE_JSON="$REPORT_DIR/test_report_${REPORT_TS}.json"
@@ -120,8 +116,8 @@ EOF
 
     echo "Report written to: $REPORT_FILE_JSON"
 
-    # Keep only 5 most recent JSON reports
-    ls -1t "$REPORT_DIR"/test_report_*.json 2>/dev/null | sed -n '6,$p' | xargs -r rm -f
+    # Keep only 1 most recent JSON reports
+    ls -1t "$REPORT_DIR"/test_report_*.json 2>/dev/null | sed -n '2,$p' | xargs -r rm -f
 }
 
 run_backend() {
