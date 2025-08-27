@@ -7,6 +7,8 @@ import az_intf.api as az_api
 
 
 class _DummyAPI:
+    def delete_container(self):
+        return True
     def add_container(self, user):
         return True
 

@@ -251,7 +251,7 @@ case "$SUBCOMMAND" in
     # Validate generated JSON report meets thresholds and statuses
     check_report() {
         local report_file="$REPORT_FILE_JSON"
-        local be_expect=${BACKEND_EXPECT:-13}
+        local be_expect=${BACKEND_EXPECT:-14}
         local fe_expect=${FRONTEND_EXPECT:-10}
         local failed=0
 

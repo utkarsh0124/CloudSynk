@@ -152,14 +152,11 @@ class LogoutAPIView(APIView):
         return Response({'success': True}, status=status.HTTP_200_OK)
 
 
-class RemoveUserAPIView(APIView):
+class DeactivateUserAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        
         usr_obj = request.user
-        logout(request)
-
         try:
             user_info = UserInfo.objects.get(user=usr_obj)
         except UserInfo.DoesNotExist:
@@ -169,9 +166,12 @@ class RemoveUserAPIView(APIView):
         if api_instance:
             api_instance.delete_container()
             az_api.del_api_instance()
-            
+            # Delete the user
+            usr_obj.delete()
+            logout(request)
             if not _is_api_request(request):
-                return redirect('/home/')  
+                return redirect('login')
+            return Response({'success': True, 'message': 'Account deactivated.'}, status=status.HTTP_200_OK)
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -213,7 +213,6 @@ class DeleteBlobAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, blob_name=None):
-        
         user = request.user
         try:
             user_info = UserInfo.objects.get(user=user)
