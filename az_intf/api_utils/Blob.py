@@ -190,61 +190,59 @@ class SampleBlob:
 
         logger.log(severity['INFO'], 'BLOB OBJECT CREATED : {}'.format(self.__container_name))
 
-    def blob_exists(self, blob_name:str):
+    def __blob_exists(self, blob_name:str):
         if self.__container_name in self.__container_blob_dict.keys():
             return blob_name in [blob for blob in self.__container_blob_dict[self.__container_name]]
         else:
             logger.log(severity['INFO'], 'BLOB DOES NOT EXIST : {}'.format(blob_name))
             return False
 
-    def get_blob_obj(self, blob_name:str):
-        if self.__container_name in self.__container_blob_dict.keys():
-            if self.blob_exists(blob_name):
-                return blob_name in self.__container_blob_dict[self.__container_name]
-
-    def __add_to_dict(self, blob_name):
-        if not self.blob_exists(blob_name):
-            self.__container_blob_dict[self.__container_name].add(blob_name)
-        else:
-            logger.log(severity['ERROR'], 'BLOB ALREADY PRESENT CANNOT ADD TO DICT : {}'.format(blob_name))
-
-
-    def __remove_from_dict(self, blob_name:str):
-        if self.blob_exists(blob_name):
-            self.__container_blob_dict[self.__container_name].remove(blob_name)
-        else:
-            logger.log(severity['ERROR'], 'BLOB NOT PRESENT CANNOT DELETE FROM DICT : {}'.format(blob_name))
-
-
     def __add_to_db(self, blob_name:str):
-        new_blob_entry = blob_table()
-        
-        new_blob_entry.blob_name = blob_name
-        new_blob_entry.user_id = self.__user_obj_info.user
-        new_blob_entry.container_name = self.__container_name
-        new_blob_entry.blob_size = 0
-        new_blob_entry.blob_update_time = timezone.now()
-        new_blob_entry.save()
-
-        # udpate dict
-        if new_blob_entry.blob_id:
-            self.__add_to_dict(new_blob_entry.blob_name)
+        try:
+            # Update DB
+            new_blob_entry = blob_table()
+            
+            new_blob_entry.blob_name = blob_name
+            new_blob_entry.user_id = self.__user_obj_info.user
+            new_blob_entry.container_name = self.__container_name
+            new_blob_entry.blob_size = 0
+            new_blob_entry.blob_update_time = timezone.now()
+            new_blob_entry.save()
+        except Exception as error:
+            logger.log(severity['ERROR'], 'BLOB CREATE EXCEPTION : {}'.format(error))
         else:
-            logger.log(severity['ERROR'], 'BLOB ID NOT FOUND CANNOT ADD TO DICT : {}'.format(blob_name))
+            # udpate dict
+            if new_blob_entry.blob_id:
+                if not self.__blob_exists(blob_name):
+                    self.__container_blob_dict[self.__container_name].add(blob_name)
+                else:
+                    logger.log(severity['ERROR'], 'BLOB ALREADY PRESENT CANNOT ADD TO DICT : {}'.format(blob_name))
 
     def __delete_from_db(self, blob_name:str):
+        deletion_success = False
         blob_obj = blob_table.objects.get(blob_name=blob_name, user_id=self.__user_obj_info.user)
         if blob_obj:
-            blob_obj.delete()
+            try:
+                # Update DB
+                blob_obj.delete()
+                deletion_success = True
+            except Exception as error:
+                logger.log(severity['ERROR'], 'BLOB DELETE EXCEPTION : {}'.format(error))
         else:
             logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
+            return deletion_success
         
         #update dict
-        self.__remove_from_dict(blob_name)
+        if self.__blob_exists(blob_name):
+            self.__container_blob_dict[self.__container_name].remove(blob_name)
+        else:
+            deletion_success=False
+            logger.log(severity['ERROR'], 'BLOB NOT PRESENT CANNOT DELETE FROM DICT : {}'.format(blob_name))
+
         logger.log(severity['INFO'], 'BLOB DELETED : {}'.format(blob_name))
+        return deletion_success
 
-
-    def get_list(self):
+    def get_blob_list(self):
         # if self.__container_name in self.__container_blob_dict:
         #     return list(self.__container_blob_dict[self.__container_name])
         # else:
@@ -272,7 +270,7 @@ class SampleBlob:
         operation_status = 0
         logger.log(severity['INFO'], 'CREATING BLOB : {}'.format(file_name))
 
-        if self.blob_exists(file_name):
+        if self.__blob_exists(file_name):
             logger.log(severity['ERROR'], 'BLOB ALREADY EXISTS: {}'.format(file_name))
             return operation_status
         
@@ -285,28 +283,21 @@ class SampleBlob:
 
         return operation_status
     
-        
     def blob_delete(self, blob_name):
-        operation_status = 0
-        
-        if self.blob_exists(blob_name):
+        if self.__delete_from_db(blob_name):
             ''' 
             # Azure API call to delete blob
             '''
-            #update blob DB
-            self.__delete_from_db(blob_name)
+            logger.log(severity['INFO'], 'BLOB DELETED : {}'.format(blob_name))
         else :
-            logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
-
-        return operation_status
+            logger.log(severity['ERROR'], 'BLOB DELETION ERROR : {}'.format(blob_name))    
     
-    
-    def download_blob(self, path_to_save, blob_name):
+    def blob_download(self, path_to_save, blob_name):
         operation_status = 0
         file_byte_arr = None
         blob_file = os.path.join(path_to_save, blob_name)
         
-        if self.blob_exists(blob_name):
+        if self.__blob_exists(blob_name):
             '''
             AZURE API call to download blob
             '''
@@ -314,12 +305,31 @@ class SampleBlob:
             logger.log(severity['ERROR'], 'BLOB NOT FOUND : {}'.format(blob_name))
         return operation_status
     
-    
     def delete_all_blobs(self):
+        delete_success=False
         if self.__container_name in self.__container_blob_dict.keys():
-            for blob in self.__container_blob_dict[self.__container_name]:
-                blob.delete()
-            del self.__container_blob_dict[self.__container_name]
+            '''
+            No need to call Azure API separately to delete every blob
+            while deleting the container all blobs inside gets deleted
+            Automatically by azure
+            '''
+            # Iterate over all blobs in the container using get_blob_list()
+            print("All blobs before delete : ")
+            for blob_info in self.get_blob_list():
+                blob_name = blob_info['blob_name']
+                print(blob_name)
+
+            for blob_info in self.get_blob_list():
+                blob_name = blob_info['blob_name']
+                # Delete blob from DB
+                self.blob_delete(blob_name)
+
+            print("All blobs After delete : ")
+            for blob_info in self.get_blob_list():
+                blob_name = blob_info['blob_name']
+                print(blob_name)
+            delete_success=True
             logger.log(severity['INFO'], 'ALL BLOBS DELETED')
         else:
             logger.log(severity['ERROR'], 'CONTAINER NOT FOUND : {}'.format(self.__container_name))
+        return delete_success

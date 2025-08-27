@@ -72,6 +72,22 @@
             {% csrf_token %}
             <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0">Logout</button>
           </form>
+          <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
+            {% csrf_token %}
+            <button type="button" id="deactivate-btn" class="block px-4 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0">Deactivate</button>
+          </form>
+
+          <!-- Modal for Deactivate Confirmation -->
+          <div id="deactivate-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
+            <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
+              <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm Deactivation</h2>
+              <p class="mb-4 text-gray-700">Deactivating your account will permanently remove all your stored data. This action cannot be undone. Are you sure you want to continue?</p>
+              <div class="flex justify-end space-x-3">
+                <button id="cancel-deactivate" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                <button id="confirm-deactivate" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Deactivate</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <script>
@@ -175,22 +191,35 @@
       </div>
       <script>
         $(document).ready(function() {
-        $('#tile-view-btn').on('click', function() {
-          $('#file-list-container')
-          .removeClass('flex flex-col')
-          .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
-          $('.file-item-tile').show();
+          // Deactivate modal logic
+          $('#deactivate-btn').on('click', function(e) {
+            e.preventDefault();
+            $('#deactivate-modal').removeClass('hidden');
+          });
+          $('#cancel-deactivate').on('click', function() {
+            $('#deactivate-modal').addClass('hidden');
+          });
+          $('#confirm-deactivate').on('click', function() {
+            // Submit the deactivate form
+            $(this).closest('.dropdown-menu').find('form[action$="deactivate/"]').submit();
+          });
+
+          $('#tile-view-btn').on('click', function() {
+            $('#file-list-container')
+              .removeClass('flex flex-col')
+              .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
+            $('.file-item-tile').show();
+            $('.file-item-list').hide();
+          });
+          $('#list-view-btn').on('click', function() {
+            $('#file-list-container')
+              .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
+              .addClass('flex flex-col');
+            $('.file-item-tile').hide();
+            $('.file-item-list').show();
+          });
+          // Initial state: show tile view
           $('.file-item-list').hide();
-        });
-        $('#list-view-btn').on('click', function() {
-          $('#file-list-container')
-          .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
-          .addClass('flex flex-col');
-          $('.file-item-tile').hide();
-          $('.file-item-list').show();
-        });
-        // Initial state: show tile view
-        $('.file-item-list').hide();
         });
       </script>
       <style>

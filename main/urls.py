@@ -10,7 +10,7 @@ urlpatterns = [
     path("signup/", views.SignupAPIView.as_view(), name="signup"),
     path("login/", views.LoginAPIView.as_view(), name="login"),
     path("logout/", views.LogoutAPIView.as_view(), name="logout"),
-    path("rmUser/", views.RemoveUserAPIView.as_view(), name="rm_user"),
+    path("deactivate/", views.DeactivateUserAPIView.as_view(), name="deactivate"),
     path("deleteFile/<str:blob_name>/", views.DeleteBlobAPIView.as_view(), name="delete"),
     path("addFile/", views.AddBlobAPIView.as_view(), name="add"),
 ]

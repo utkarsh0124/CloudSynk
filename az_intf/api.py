@@ -23,13 +23,13 @@ class ApiUtils:
                                                     container_name,
                                                     Auth.Auth().auth_api()
                                                     )
-            self.__blob_obj = self.__container_obj.blob(self.__user_obj)
+            self.__blob_obj = self.__container_obj.get_blob_obj(self.__user_obj)
         else:
             self.__container_obj = Container.Container(
                                                     container_name,
                                                     Auth.Auth().auth_api()
                                                     )
-            self.__blob_obj = self.__container_obj.blob(self.__user_obj)
+            self.__blob_obj = self.__container_obj.get_blob_obj(self.__user_obj)
 
     def add_container(self, user_obj):
         if self.__container_obj:
@@ -45,7 +45,7 @@ class ApiUtils:
 
     def delete_container(self):
         if self.__container_obj:
-            self.__container_obj.container_delete()
+            self.__container_obj.container_delete(self.__user_obj)
         else:
             logger.log(severity['ERROR'], 'CONTAINER OBJECT IS NONE')
         
@@ -59,7 +59,7 @@ class ApiUtils:
         return self.__blob_obj.get_blob_size(blob_path)
 
     def list_blob(self):
-        return self.__container_obj.blob(self.__user_obj).get_list()
+        return self.__container_obj.get_blob_obj(self.__user_obj).get_blob_list()
 
 
 def get_api_instance(user_obj, container_name:str):

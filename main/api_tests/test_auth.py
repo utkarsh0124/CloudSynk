@@ -8,6 +8,8 @@ import az_intf.api as az_api
 
 
 class _DummyAPI:
+    def delete_container(self):
+        return True
     def add_container(self, user):
         return True
 
@@ -136,3 +138,32 @@ class AuthTests(TestCase):
         # Home view should indicate success for authenticated session
         # If it returned HTML, ensure the authenticated user is served the page (status 200)
         self.assertIn(resp2.status_code, (200,))
+
+    def test_deactivate_user(self):
+        """Test user deactivation (deletion) via the deactivate endpoint"""
+        # Signup and login
+        response = self.client.post(self.signup_url, {
+            'username': self.user_data['username'],
+            'password1': self.user_data['password'],
+            'password2': self.user_data['password'],
+            'email_id': self.user_data['email_id']
+        }, format='json')
+        self.assertIn(response.status_code, (200, 201))
+        self.assertTrue(User.objects.filter(username=self.user_data['username']).exists())
+
+        logged_in = self.client.login(username=self.user_data['username'], password=self.user_data['password'])
+        self.assertTrue(logged_in)
+
+        # Deactivate (delete) the user
+        deactivate_url = reverse('deactivate')
+        response = self.client.post(deactivate_url, follow=True)
+        self.assertIn(response.status_code, (200, 302))
+        self.assertFalse(User.objects.filter(username=self.user_data['username']).exists())
+
+        # Try to login again (should fail)
+        login_response = self.client.post(self.login_url, {
+            'username': self.user_data['username'],
+            'password': self.user_data['password']
+        }, format='json')
+        self.assertNotEqual(login_response.status_code, 200)
+        self.assertIn('error', login_response.json())
