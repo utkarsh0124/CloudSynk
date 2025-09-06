@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import User
+# from django.contrib.auth.models import User
 from django.shortcuts import redirect
 from .serializers import UserSerializer
 from az_intf import utils as app_utils
@@ -15,7 +15,6 @@ from django.shortcuts import render
 from django.conf import settings
 from apiConfig import AZURE_API_DISABLE
 from datetime import datetime
-
 
 def _is_api_request(request):
     """Return True if the request should be treated as an API/XHR call returning JSON.
@@ -42,15 +41,18 @@ class SignupAPIView(APIView):
         return render(request, 'user/signup.html')
 
     def post(self, request):
-        
-        # accept legacy form keys used by tests and template views
         data = request.data.copy()
-        # support password1/password2 from form posts
-        if 'password' not in data and 'password1' in data:
-            data['password'] = data.get('password1')
-        # allow email_id as alias for email
-        if 'email' not in data and 'email_id' in data:
-            data['email'] = data.get('email_id')
+        if 'username' not in data:
+            return Response({'success': False, 'error': 'Username is a required field'}, status=status.HTTP_400_BAD_REQUEST)
+        if 'password1' not in data or 'password2' not in data:
+            return Response({'success': False, 'error': 'Password Fields are required'}, status=status.HTTP_400_BAD_REQUEST)
+        if data.get('password1') != data.get('password2'):
+            return Response({'success': False, 'error': 'Passwords Do Not Match'}, status=status.HTTP_400_BAD_REQUEST)
+        if 'email' not in data:
+            return Response({'success': False, 'error': 'Email is a required field'}, status=status.HTTP_400_BAD_REQUEST)
+
+        data['password'] = data.get('password1')
+        data['email'] = data.get('email')
 
         serializer = UserSerializer(data=data)
         if not serializer.is_valid():
@@ -60,45 +62,26 @@ class SignupAPIView(APIView):
         password = serializer.validated_data['password']
         email = serializer.validated_data.get('email')
 
-        # basic password matching if given via password/confirm
-        password2 = request.data.get('password2')
-        if password2 and password2 != password:
-            return Response({'success': False, 'error': 'Passwords do not match'}, status=status.HTTP_400_BAD_REQUEST)
-
         if app_utils.user_exists(username):
             return Response({'success': False, 'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.create({'username': username, 'password': password, 'email': email})
 
-        user_info, created = UserInfo.objects.get_or_create(
-            user=user,
-            defaults={
-                'user_name': username,
-                'subscription_type': dict(SUBSCRIPTION_CHOICES)[DEFAULT_SUBSCRIPTION_AT_INIT],
-                'container_name': app_utils.assign_container(username),
-                'storage_quota_bytes': dict(SUBSCRIPTION_VALUES)[DEFAULT_SUBSCRIPTION_AT_INIT],
-                'storage_used_bytes': 0,
-                'dob': None,
-                'email_id': request.data.get('email_id', email)
-            }
-        )
+        created = az_api.init_container(user, username, app_utils.assign_container(username), email)
+        if not created:
+            return Response({'success': False, 'error': 'Container Initialization Failed'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if created:
-            api_instance = az_api.get_api_instance(user, app_utils.assign_container(username))
-            if api_instance:
-                api_instance.add_container(user)
-            else:
-                user.delete()
-                user_info.delete()
-            # If the request came from a browser/form, redirect to the login page (render if you prefer)
-            if not _is_api_request(request):
-                return redirect('/login/')  # or render(request, 'user/signup_success.html', {'user': user})
+        container_instance = az_api.get_container_instance(username)
+        if container_instance is None:
+            user.delete()
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # If the request came from a browser/form, redirect to the login page (render if you prefer)
+        if not _is_api_request(request):
+            return redirect('/login/')  # or render(request, 'user/signup_success.html', {'user': user})
 
-            # Otherwise return JSON for API clients
-            return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
-
+        # Otherwise return JSON for API clients
         return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
-
 
 class LoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -118,11 +101,9 @@ class LoginAPIView(APIView):
         if user:
             login(request, user)  # creates session cookie for session auth
             # Session-based auth: do not create or return tokens
-
             # treat JSON or XHR as API client
-            is_api_client = _is_api_request(request)
 
-            if not is_api_client:
+            if not _is_api_request(request):
                 # browser/form -> redirect to home
                 return redirect('home')
             # API client -> return JSON success (session cookie is set)
@@ -142,9 +123,9 @@ class LogoutAPIView(APIView):
         return render(request, 'main/login.html')
 
     def post(self, request):
-        
         logout(request)
-        az_api.del_api_instance()
+        if not az_api.del_container_instance(request.user.username):
+            return Response({'success': False, 'error': 'Error deleting container instance'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if not _is_api_request(request):
             return redirect('/home/')  
@@ -157,15 +138,10 @@ class DeactivateUserAPIView(APIView):
 
     def post(self, request):
         usr_obj = request.user
-        try:
-            user_info = UserInfo.objects.get(user=usr_obj)
-        except UserInfo.DoesNotExist:
-            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
-
-        api_instance = az_api.get_api_instance(usr_obj, user_info.container_name)
+        api_instance = az_api.get_container_instance(usr_obj.username)
         if api_instance:
-            api_instance.delete_container()
-            az_api.del_api_instance()
+            api_instance.container_delete(usr_obj)
+            az_api.del_container_instance(usr_obj.username)
             # Delete the user
             usr_obj.delete()
             logout(request)
@@ -192,43 +168,47 @@ class AddBlobAPIView(APIView):
 
         # For simplicity, assume fixed file size as in original views
         file_size_bytes = 100
-        if user_info.storage_used_bytes + file_size_bytes >= user_info.storage_quota_bytes:
-            return Response({'success': False, 'error': 'Storage Exceeded! Upload Failed'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user_info.storage_used_bytes += file_size_bytes
-        user_info.save()
-
-        api_instance = az_api.get_api_instance(user, user_info.container_name)
+        api_instance = az_api.get_container_instance(user_info.user_name)
         if api_instance:
-            api_instance.create_blob(file_name)
-            accept = request.META.get('HTTP_ACCEPT', '')
-            content_type = request.META.get('CONTENT_TYPE', '')
-            is_html_client = 'text/html' in accept or content_type.startswith('application/x-www-form-urlencoded') or 'multipart/form-data' in content_type
-            if is_html_client:
-                return redirect('/home/')  
+            result, blob_id = api_instance.blob_create(file_name, file_size_bytes, "file")
+            # add a debug log with format
+            print(['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}, blob_id : {}".format(file_name, file_size_bytes, "file", blob_id))
+            if not result:
+                return Response({'success': False, 'error': 'Blob creation failed'}, status=status.HTTP_400_BAD_REQUEST)
+            # On success, return JSON for API clients
+            if _is_api_request(request):
+                return Response({'success': True, 'blob_id': blob_id}, status=status.HTTP_201_CREATED)
+            # browser/form -> redirect to home
+            return redirect('/home/')
+        # If api_instance is None
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DeleteBlobAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, blob_name=None):
-        user = request.user
+    def post(self, request, blob_id=None):
+        if not blob_id:
+            return Response({'success': False, 'error': 'Missing blob ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        print("DELETE : Blob ID :", blob_id, ":")
+        user_info = None
         try:
-            user_info = UserInfo.objects.get(user=user)
+            user_info = UserInfo.objects.get(user=request.user)
         except UserInfo.DoesNotExist:
             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        api_instance = az_api.get_api_instance(user, user_info.container_name)
+        api_instance = az_api.get_container_instance(user_info.user_name)
         if api_instance:
-            size = api_instance.get_blob_size(blob_name)
-            user_info.storage_used_bytes = max(0, user_info.storage_used_bytes - size)
-            user_info.save()
-            api_instance.delete_blob(blob_name)
-            
-            if not _is_api_request(request):
-                return redirect('/home/')
-
+            if not api_instance.blob_delete(blob_id):
+                return Response({'success': False, 'error': 'Blob deletion failed'}, status=status.HTTP_400_BAD_REQUEST)
+            # On success, return JSON for API clients
+            if _is_api_request(request):
+                return Response({'success': True}, status=status.HTTP_200_OK)
+            # browser/form -> redirect to home
+            return redirect('/home/')
+        # If api_instance is None
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -236,26 +216,28 @@ class HomeAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        
         user = request.user
         # Redirect unauthenticated users to Login view
         if not request.user or not request.user.is_authenticated:
             return redirect(settings.LOGIN_URL)
 
         user_info_qs = UserInfo.objects.filter(user=user).values()
-        if user_info_qs.count() == 0:
-            return Response({'success': False, 'error': 'User not found'}, status=status.HTTP_400_BAD_REQUEST)
+        if user_info_qs.count() != 1:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        api_instance = az_api.get_api_instance(user, user_info_qs[0]['container_name'])
-        blob_list = api_instance.list_blob() if api_instance else []
+        api_instance = az_api.get_container_instance(user_info_qs[0]['user_name'])
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        blob_list = api_instance.get_blob_list()
 
         # convert numeric uploaded_at to datetime for the template
-        for b in blob_list:
-            ts = b.get('uploaded_at')
+        for blob_obj in blob_list:
+            ts = blob_obj.get('uploaded_at')
             try:
-                b['uploaded_at_dt'] = datetime.fromtimestamp(float(ts)) if ts is not None else None
+                blob_obj['uploaded_at_dt'] = datetime.fromtimestamp(float(ts)) if ts is not None else None
             except Exception:
-                b['uploaded_at_dt'] = None
+                blob_obj['uploaded_at_dt'] = None
 
         # Decide whether to return JSON (API client) or render HTML (browser)
         if _is_api_request(request):

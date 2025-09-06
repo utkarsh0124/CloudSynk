@@ -6,6 +6,6 @@ urlpatterns = [
     path('login/', views.LoginAPIView.as_view(), name='api_login'),
     path('logout/', views.LogoutAPIView.as_view(), name='api_logout'),
     path("deactivate/", views.DeactivateUserAPIView.as_view(), name="deactivate"),
-    path('deleteFile/<str:blob_name>/', views.DeleteBlobAPIView.as_view(), name='api_delete'),
+    path('deleteFile/<str:blob_id>/', views.DeleteBlobAPIView.as_view(), name='api_delete'),
     path('addFile/', views.AddBlobAPIView.as_view(), name='api_add'),
 ]
