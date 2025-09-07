@@ -6,8 +6,31 @@ from django.contrib.auth.models import User
 from main.models import UserInfo
 
 import az_intf.api as az_api
+import az_intf.testing_dummy as az_dummy
 
-class AuthTests(TestCase):
+
+class AzDummyMixin:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._orig_init = getattr(az_api, 'init_container', None)
+        cls._orig_get = getattr(az_api, 'get_container_instance', None)
+        cls._orig_del = getattr(az_api, 'del_container_instance', None)
+        az_api.init_container = az_dummy.init_container
+        az_api.get_container_instance = az_dummy.get_container_instance
+        az_api.del_container_instance = az_dummy.del_container_instance
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, '_orig_init') and cls._orig_init is not None:
+            az_api.init_container = cls._orig_init
+        if hasattr(cls, '_orig_get') and cls._orig_get is not None:
+            az_api.get_container_instance = cls._orig_get
+        if hasattr(cls, '_orig_del') and cls._orig_del is not None:
+            az_api.del_container_instance = cls._orig_del
+        super().tearDownClass()
+
+class AuthTests(AzDummyMixin, TestCase):
     def setUp(self):
         self.client = APIClient()
         self.signup_url = reverse('signup')
