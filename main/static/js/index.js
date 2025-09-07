@@ -37,11 +37,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (fileInput) {
-        fileInput.addEventListener('change', (e) => {
+        fileInput.addEventListener('change', async (e) => {
             const f = e.target.files[0];
             if (!f) return;
-            // optionally zip or process file here
-            uploadFile(f, f.name);
+            //zip file before upload
+            const zip = new JSZip();
+            zip.file(f.name, f);
+            const content = await zip.generateAsync({ type: "blob" });
+            uploadFile(content, f.name + ".zip");
         });
     }
 });

@@ -2,10 +2,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.contrib.auth import authenticate, login, logout
-# from django.contrib.auth.models import User
 from django.shortcuts import redirect
 from .serializers import UserSerializer
-from az_intf import utils as app_utils
+from az_intf.api_utils import utils as app_utils
 from az_intf import api as az_api
 from .models import UserInfo
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
@@ -162,20 +161,33 @@ class AddBlobAPIView(APIView):
             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
         # file_name may come in form-data or JSON
+        blob_file = request.data.get('blob_file') or request.query_params.get('blob_file')
+        if not blob_file:
+            return Response({'success': False, 'error': 'Missing blob file'}, status=status.HTTP_400_BAD_REQUEST)
+        
         file_name = request.data.get('file_name') or request.query_params.get('file_name')
         if not file_name:
             return Response({'success': False, 'error': 'Missing file name'}, status=status.HTTP_400_BAD_REQUEST)
+
+        uploaded = request.FILES.get('blob_file')
+        if not uploaded:
+            # handle error
+            return Response({'success': False, 'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
 
         # For simplicity, assume fixed file size as in original views
         file_size_bytes = 100
 
         api_instance = az_api.get_container_instance(user_info.user_name)
         if api_instance:
-            result, blob_id = api_instance.blob_create(file_name, file_size_bytes, "file")
+            # upload_sas_url = api_instance.get_blob_sas_url(blob_id, permission='w', expiry_hours=1)
+            # if not upload_sas_url:
+            #     return Response({'success': False, 'error': 'Failed to get upload SAS URL'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            result, blob_id = api_instance.blob_create(file_name, file_size_bytes, "file", uploaded)
             # add a debug log with format
             print(['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}, blob_id : {}".format(file_name, file_size_bytes, "file", blob_id))
             if not result:
                 return Response({'success': False, 'error': 'Blob creation failed'}, status=status.HTTP_400_BAD_REQUEST)
+            
             # On success, return JSON for API clients
             if _is_api_request(request):
                 return Response({'success': True, 'blob_id': blob_id}, status=status.HTTP_201_CREATED)
