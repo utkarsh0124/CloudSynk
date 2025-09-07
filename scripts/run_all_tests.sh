@@ -18,14 +18,56 @@ fi
 echo "BASE_DIR : ${BASE_DIR}"
 cd "$ROOT_DIR"
 
+# Ensure created files are user-writable by default; caller may override if needed
+# Use a permissive umask that still respects group/other policies (0022 -> files writable by user)
+umask 0022
+
 timestamp() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 banner() { printf "\n==== %s - %s ====\n" "$(timestamp)" "$1"; }
 
-# Prepare reports directory and report file
+# Prepare reports directory and report file; create with explicit permissions
 REPORT_DIR="$ROOT_DIR/scripts/reports"
 mkdir -p "$REPORT_DIR"
+chmod 0755 "$REPORT_DIR" || true
+# Attempt to ensure current user owns the reports dir (best-effort)
+if command -v id >/dev/null 2>&1; then
+    USERNAME=$(id -un 2>/dev/null || true)
+    if [ -n "$USERNAME" ]; then
+        chown "$USERNAME" "$REPORT_DIR" 2>/dev/null || true
+    fi
+fi
 REPORT_TS=$(date -u +"%Y%m%dT%H%M%SZ")
 REPORT_FILE_JSON="$REPORT_DIR/test_report_${REPORT_TS}.json"
+
+# Cleanup function to remove temporary files created during test runs
+cleanup() {
+    # remove backend/frontend temp outputs and any report tmp file
+    # remove temp files created for this run
+    for f in "${backend_tmp:-}" "${frontend_tmp:-}" "${REPORT_TMP:-}"; do
+        if [ -n "$f" ] && [ -f "$f" ]; then
+            rm -f "$f" 2>/dev/null || true
+        fi
+    done
+
+    # best-effort: clean up any leftover backend_out.* and frontend_out.* in REPORT_DIR
+    if [ -d "$REPORT_DIR" ]; then
+        shopt -s nullglob || true
+        for f in "$REPORT_DIR"/backend_out.* "$REPORT_DIR"/frontend_out.* "$REPORT_DIR"/*.tmp; do
+            # skip JSON reports (keep test_report_*.json)
+            case "$f" in
+                *.json) continue ;;
+            esac
+            if [ -e "$f" ]; then
+                chmod u+w "$f" 2>/dev/null || true
+                rm -f "$f" 2>/dev/null || echo "[cleanup] could not remove $f" >&2
+            fi
+        done
+        shopt -u nullglob || true
+    fi
+}
+
+# Ensure cleanup on exit (runs even if script exits due to error)
+trap cleanup EXIT
 
 write_report() {
     # Arguments: backend_out, backend_rc, frontend_out, frontend_rc
@@ -92,7 +134,8 @@ write_report() {
             frontend_tests=$(echo "$tests_line" | sed -E 's/.*: *([0-9]+).*/\1/')
         fi
         if [ -n "$time_line" ]; then
-            frontend_time=$(echo "$time_line" | sed -E 's/Time: *([0-9.]+) s/\1/')
+            # Extract only the first numeric value (seconds). Jest may append ", estimated ..."
+            frontend_time=$(echo "$time_line" | grep -oE '[0-9]+(\.[0-9]+)?' | head -n1 || echo 0)
         fi
         if [ "$frontend_rc" -eq 0 ]; then frontend_status="OK"; else frontend_status="FAILED"; fi
 
@@ -111,26 +154,31 @@ write_report() {
     fi
 
     # Build JSON
-    cat > "$REPORT_FILE_JSON" <<EOF
+    # Ensure report file is created with safe permissions; use a temp then move to avoid partial writes
+    REPORT_TMP="$REPORT_FILE_JSON.tmp"
+    cat > "$REPORT_TMP" <<EOF
 {
   "timestamp": "${REPORT_TS}",
   "generated_at": "$(timestamp)",
-  "backend": {
-    "status": "${backend_status}",
-    "total_tests": ${backend_total},
-    "time_seconds": ${backend_time},
+    "backend": {
+        "status": "${backend_status}",
+        "total_tests": ${backend_total},
+        "time_seconds": ${backend_time:-0},
     "tests": ${backend_tests_json}
   },
-  "frontend": {
-    "status": "${frontend_status}",
-    "suites": ${frontend_suites},
-    "tests": ${frontend_tests},
-    "time_seconds": ${frontend_time},
+    "frontend": {
+        "status": "${frontend_status}",
+        "suites": ${frontend_suites},
+        "tests": ${frontend_tests},
+        "time_seconds": ${frontend_time:-0},
     "suites_list": ${frontend_suites_json}
   }
 }
 EOF
-
+    # Atomically move into place and set permissions
+    mv -f "$REPORT_TMP" "$REPORT_FILE_JSON" || { cp -f "$REPORT_TMP" "$REPORT_FILE_JSON"; rm -f "$REPORT_TMP"; }
+    chmod 0644 "$REPORT_FILE_JSON" 2>/dev/null || true
+    if [ -n "$USERNAME" ]; then chown "$USERNAME" "$REPORT_FILE_JSON" 2>/dev/null || true; fi
     echo "Report written to: $REPORT_FILE_JSON"
 
     # Keep only 1 most recent JSON reports
@@ -144,6 +192,9 @@ run_backend() {
     # Use verbosity 2 to list each test that runs for clearer output
     # Create temp files inside the reports directory so write_report can always read them
     backend_tmp=$(mktemp "$REPORT_DIR/backend_out.XXXXXX")
+    # make temp file readable/writable by user and attempt to set ownership
+    chmod 0644 "$backend_tmp" 2>/dev/null || true
+    if [ -n "${USERNAME:-}" ]; then chown "${USERNAME}" "$backend_tmp" 2>/dev/null || true; fi
     if [ ${#BACKEND_ARGS[@]} -gt 0 ]; then
         # Capture both stdout and stderr so per-test lines are saved
         ./manage.py test -v2 "${BACKEND_ARGS[@]}" 2>&1 | tee "$backend_tmp"
@@ -173,6 +224,8 @@ run_frontend() {
     banner "FRONTEND TESTS (Jest) START"
     # Create frontend temp file inside reports directory so write_report can read it
     frontend_tmp=$(mktemp "$REPORT_DIR/frontend_out.XXXXXX")
+    chmod 0644 "$frontend_tmp" 2>/dev/null || true
+    if [ -n "${USERNAME:-}" ]; then chown "${USERNAME}" "$frontend_tmp" 2>/dev/null || true; fi
     npm test --silent 2>&1 | tee "$frontend_tmp"
     rc=${PIPESTATUS[0]}
     if [ $rc -ne 0 ]; then
@@ -251,7 +304,7 @@ case "$SUBCOMMAND" in
     # Validate generated JSON report meets thresholds and statuses
     check_report() {
         local report_file="$REPORT_FILE_JSON"
-        local be_expect=${BACKEND_EXPECT:-14}
+        local be_expect=${BACKEND_EXPECT:-23}
         local fe_expect=${FRONTEND_EXPECT:-10}
         local failed=0
 
@@ -270,14 +323,61 @@ case "$SUBCOMMAND" in
             backend_status=$(jq -r '.backend.status // ""' "$report_file")
             frontend_status=$(jq -r '.frontend.status // ""' "$report_file")
         else
-            # fallback using grep/sed for environments without jq
-            backend_total=$(grep -oE '"total_tests"[[:space:]]*:[[:space:]]*[0-9]+' "$report_file" | tail -n1 | sed -E 's/.*: *([0-9]+)$/\1/' || echo 0)
-            frontend_total=$(grep -oE '"tests"[[:space:]]*:[[:space:]]*[0-9]+' "$report_file" | head -n1 | sed -E 's/.*: *([0-9]+)$/\1/' || echo 0)
-            # backend tests non-ok detection
-            non_ok_backend=$(grep -o '{[^}]*"status"[^}]*}' "$report_file" | sed -E 's/.*"status"\s*:\s*"?([^",}]*)"?.*/\1/' | nl -ba | while read -r n s; do if [ "$(echo "$s" | tr '[:upper:]' '[:lower:]')" != "ok" ]; then echo "non-ok"; break; fi; done || true)
-            non_pass_frontend=$(grep -o '{[^}]*"status"[^}]*}' "$report_file" | sed -E 's/.*"status"\s*:\s*"?([^",}]*)"?.*/\1/' | nl -ba | while read -r n s; do if [ "$(echo "$s" | tr '[:lower:]' '[:upper:]')" != "PASS" ]; then echo "non-pass"; break; fi; done || true)
-            backend_status=$(grep -E '"backend"[[:space:]]*:\s*\{' -n -n "$report_file" >/dev/null 2>&1 && grep -A3 '"backend"' "$report_file" | grep -oE '"status"\s*:\s*"[^"]+"' | head -n1 | sed -E 's/.*: *"([^"]+)"/\1/' || echo "")
-            frontend_status=$(grep -A3 '"frontend"' "$report_file" | grep -oE '"status"\s*:\s*"[^"]+"' | head -n1 | sed -E 's/.*: *"([^"]+)"/\1/' || echo "")
+            # fallback using python (preferred) or grep/sed for environments without jq
+            if command -v python3 >/dev/null 2>&1; then
+                backend_total=$(python3 - "$report_file" <<'PY'
+import json,sys
+obj=json.load(open(sys.argv[1]))
+print(obj.get('backend',{}).get('total_tests',0))
+PY
+)
+                frontend_total=$(python3 - "$report_file" <<'PY'
+import json,sys
+obj=json.load(open(sys.argv[1]))
+print(obj.get('frontend',{}).get('tests',0))
+PY
+)
+                non_ok_backend=$(python3 - "$report_file" <<'PY'
+import json,sys
+J=json.load(open(sys.argv[1]))
+for t in J.get('backend',{}).get('tests',[]):
+    if str(t.get('status','')).lower()!='ok':
+        print(f"{t.get('name')}:{t.get('status')}")
+        sys.exit(0)
+# no output if none
+PY
+)
+                non_pass_frontend=$(python3 - "$report_file" <<'PY'
+import json,sys
+J=json.load(open(sys.argv[1]))
+for s in J.get('frontend',{}).get('suites_list',[]):
+    if str(s.get('status','')).upper()!='PASS':
+        print(f"{s.get('name')}:{s.get('status')}")
+        sys.exit(0)
+# no output if none
+PY
+)
+                backend_status=$(python3 - "$report_file" <<'PY'
+import json,sys
+obj=json.load(open(sys.argv[1]))
+print(obj.get('backend',{}).get('status',''))
+PY
+)
+                frontend_status=$(python3 - "$report_file" <<'PY'
+import json,sys
+obj=json.load(open(sys.argv[1]))
+print(obj.get('frontend',{}).get('status',''))
+PY
+)
+            else
+                backend_total=$(grep -oE '"total_tests"[[:space:]]*:[[:space:]]*[0-9]+' "$report_file" | tail -n1 | sed -E 's/.*: *([0-9]+)$/\1/' || echo 0)
+                frontend_total=$(grep -oE '"tests"[[:space:]]*:[[:space:]]*[0-9]+' "$report_file" | head -n1 | sed -E 's/.*: *([0-9]+)$/\1/' || echo 0)
+                # backend tests non-ok detection: limit to the backend JSON block
+                non_ok_backend=$(grep -A200 '"backend"' "$report_file" | sed -n '/"tests"\s*:\s*\[/, /\]/p' | grep -o '{[^}]*"status"[^}]*}' | sed -E 's/.*"status"\s*:\s*"?([^\",}]*)"?.*/\1/' | nl -ba | while read -r n s; do if [ "$(echo "$s" | tr '[:upper:]' '[:lower:]')" != "ok" ]; then echo "non-ok"; break; fi; done || true)
+                non_pass_frontend=$(grep -A200 '"frontend"' "$report_file" | sed -n '/"suites_list"\s*:\s*\[/, /\]/p' | grep -o '{[^}]*"status"[^}]*}' | sed -E 's/.*"status"\s*:\s*"?([^\",}]*)"?.*/\1/' | nl -ba | while read -r n s; do if [ "$(echo "$s" | tr '[:lower:]' '[:upper:]')" != "PASS" ]; then echo "non-pass"; break; fi; done || true)
+                backend_status=$(grep -E '"backend"[[:space:]]*:\s*\{' -n -n "$report_file" >/dev/null 2>&1 && grep -A3 '"backend"' "$report_file" | grep -oE '"status"\s*:\s*"[^"]+"' | head -n1 | sed -E 's/.*: *"([^"]+)"/\1/' || echo "")
+                frontend_status=$(grep -A3 '"frontend"' "$report_file" | grep -oE '"status"\s*:\s*"[^"]+"' | head -n1 | sed -E 's/.*: *"([^"]+)"/\1/' || echo "")
+            fi
         fi
 
         # [1] compare totals

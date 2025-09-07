@@ -9,6 +9,18 @@ MAX_HASH_ID_FIELD_LENGTH = 12
 MAX_BLOB_NAME_LENGTH = 1024
 MAX_SHARING_LINK_LENGTH = 1024
 
+class UserInfo(models.Model):
+    MAX_CHOICES_LENGTH = 36
+    
+    #cannot have a custom PK like user_id as the django User model has a primary key
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True) # primary key
+    user_name = models.CharField(max_length=100, null=False, blank=False)
+    subscription_type = models.CharField(max_length=MAX_CHOICES_LENGTH, choices=SUBSCRIPTION_CHOICES, default="STARTER")
+    container_name = models.CharField(max_length=250, default="None")
+    storage_quota_bytes = models.BigIntegerField(null=False, default=0)  # 0 GB default quota
+    storage_used_bytes = models.BigIntegerField(null=False, default=0)
+    dob = models.DateField(null=True, blank=True)
+    email_id = models.EmailField(max_length=254, null=True, blank=True)
 
 class Blob(models.Model):
     blob_id = models.SlugField(max_length=MAX_HASH_ID_FIELD_LENGTH, unique=True, editable=False, null=False, blank=False) # primary key
@@ -67,17 +79,3 @@ class Directory(models.Model):
             unique_string = f"directory-{self.directory_name}-{time.time()}"
             self.directory_id = hashlib.md5(unique_string.encode()).hexdigest()[:MAX_HASH_ID_FIELD_LENGTH]
         super().save(*args, **kwargs)
-
-
-class UserInfo(models.Model):
-    MAX_CHOICES_LENGTH = 36
-    
-    #cannot have a custom PK like user_id as the django User model has a primary key
-    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True) # primary key
-    user_name = models.CharField(max_length=100, null=False, blank=False)
-    subscription_type = models.CharField(max_length=MAX_CHOICES_LENGTH, choices=SUBSCRIPTION_CHOICES, default="STARTER")
-    container_name = models.CharField(max_length=250, default="None")
-    storage_quota_bytes = models.BigIntegerField(null=False, default=0)  # 0 GB default quota
-    storage_used_bytes = models.BigIntegerField(null=False, default=0)
-    dob = models.DateField(null=True, blank=True)
-    email_id = models.EmailField(max_length=254, null=True, blank=True)

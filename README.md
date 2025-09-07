@@ -1,91 +1,102 @@
-StorageApp — Release notes & developer setup
+# CloudSynk
 
-Release: DRF migration (branch: django-rest-fw-enabling)
----------------------------------------------------
-This release migrates the application's HTTP endpoints to Django REST Framework (DRF). The DRF-based views are implemented in `main/views.py` and serializers are in `main/serializers.py`.
+CloudSynk is a Django-based cloud storage web application with a modern frontend and RESTful API endpoints powered by Django REST Framework (DRF). It supports user authentication, file upload/download, and Azure Blob Storage integration.
 
-Key points
- - DRF is the canonical interface for REST endpoints in this branch.
- - The DRF handlers live in `main/views.py`. The older `main/api_views.py` (if present) is deprecated and will be removed once consumers update.
- - Tests cover both legacy and DRF flows; new DRF-specific tests are in `main/tests/test_api_views.py`.
+## Features
 
-Developer setup
----------------
-1. Create and activate a virtualenv (project convention uses `.storage-env`):
+- User signup, login, logout, and account deactivation (with all data removal)
+- File upload, download, and management
+- Modern UI (Tailwind CSS, jQuery, FontAwesome)
+- REST API endpoints for all major actions
+- Azure Blob Storage backend
+- Automated tests for backend and frontend
 
-```bash
-python3 -m venv .storage-env
-. .storage-env/bin/activate
-```
+## Developer Setup
 
-2. Install dependencies:
+1. **Clone the repository** and enter the project directory.
 
-```bash
-pip install --upgrade pip
-pip install -r requirements.txt
-```
+2. **Create and activate a virtual environment:**
+	```bash
+	python3 -m venv .storage-env
+	source .storage-env/bin/activate
+	```
 
-3. Run tests:
+3. **Install dependencies:**
+	```bash
+	pip install --upgrade pip
+	pip install -r requirements.txt
+	npm install
+	```
 
-```bash
-python manage.py test
-```
+4. **Set up environment variables as needed** 
+    ```bash
+	source env-setup
+	```
 
-Continuous integration
-----------------------
-This branch adds a GitHub Actions CI workflow at `.github/workflows/ci.yml` which:
- - installs the Python environment,
- - ensures DRF-only routing (fails if `main/urls.py` still contains the old template fallback),
- - runs `python manage.py test`.
+5. **Run the development server:**
+	```bash
+	python manage.py runserver
+	```
 
-Logging and permissions
-------------------------
-The app's logger prefers writing to `log/` in the repo root. If the process can't create files there (common in shared or root-owned workspaces), the logger will fallback to a per-user directory under `/tmp/` (e.g. `/tmp/StorageApp-logs-<user>/...`) so file logging remains available without changing repo permissions.
+6. **Run all tests (backend and frontend):**
+	```bash
+	./scripts/run_all_tests.sh
+	```
 
-If you want in-repo logs, adjust ownership from root to your user (requires root):
+## Logging and Permissions
 
-```bash
-sudo chown -R $(whoami):$(whoami) /workspace/StorageApp/log
-chmod -R u+w /workspace/StorageApp/log
-```
+- Logs are written to the `log/` directory by default. If you encounter permission issues, adjust ownership:
 
-Using the `/api/` endpoints from JS
-----------------------------------
+## API Usage
 
-This project exposes API-friendly endpoints under `/api/` (for example `/api/login/`, `/api/signup/`, `/api/addFile/`). These routes are intended for browser XHR/fetch calls and are still protected by session cookies and CSRF.
-
-Basic usage notes:
-
-- Send the CSRF token with state-changing requests (POST/PUT/DELETE). In templates the token is available in a hidden input named `csrfmiddlewaretoken`.
-- Mark requests as XHR so the server returns JSON rather than HTML. Include the header `X-Requested-With: XMLHttpRequest` and `Accept: application/json`.
-- Example (fetch):
-
-```js
-const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-fetch('/api/login/', {
-	method: 'POST',
-	headers: {
+- API endpoints are available under `/api/` (e.g., `/api/login/`, `/api/signup/`, `/api/addFile/`).
+- Use CSRF tokens and mark requests as XHR (`X-Requested-With: XMLHttpRequest`) for JSON responses.
+- Example (using fetch in JS):
+  ```js
+  fetch('/api/login/', {
+	 method: 'POST',
+	 headers: {
 		'Content-Type': 'application/json',
 		'Accept': 'application/json',
 		'X-Requested-With': 'XMLHttpRequest',
 		'X-CSRFToken': csrftoken,
-	},
-	credentials: 'same-origin',
-	body: JSON.stringify({ username: 'me', password: 'secret' })
-}).then(r => r.json()).then(console.log)
-```
+	 },
+	 credentials: 'same-origin',
+	 body: JSON.stringify({ username: 'me', password: 'secret' })
+  }).then(r => r.json()).then(console.log)
+  ```
 
-If you prefer jQuery `$.ajax`, ensure the same headers are provided (see `main/static/js/login.js` for an example). Keep CORS disabled unless you intentionally need cross-origin clients.
+## Supported API Endpoints
 
-Feature flag: ENABLE_API_ENDPOINTS
----------------------------------
+**API endpoints in `api_urls.py` (for JS clients, XHR/fetch): Currently under ENABLE_API_ENDPOINTS feature flags**
 
-The project uses an environment-driven feature flag `ENABLE_API_ENDPOINTS` to control whether explicit `/api/` routes are registered. Default behavior is conservative: the flag is `false` unless set in the environment. During development the code will still enable APIs when `DEBUG=True` to keep things convenient, but you can control the flag explicitly in any environment.
+- `POST /api/signup/` — Register a new user
+- `POST /api/login/` — User login
+- `POST /api/logout/` — User logout
+- `POST /api/deactivate/` — Deactivate (delete) user account and all data
+- `POST /api/addFile/` — Upload a file
+- `POST /api/deleteFile/<blob_name>/` — Delete a file
 
-To run tests or start the dev server with API endpoints enabled for the duration of the command, use the helper script:
+**HTML & browser endpoints in `urls.py` (for HTML forms and navigation):**
 
-```bash
-scripts/run_tests_with_api.sh
-```
+- `GET /` or `/home/` — Home page (file list, dashboard)
+- `POST /signup/` — Register a new user (form)
+- `POST /login/` — User login (form)
+- `POST /logout/` — User logout (form)
+- `POST /deactivate/` — Deactivate (delete) user account and all data (form)
+- `POST /addFile/` — Upload a file (form)
+- `POST /deleteFile/<blob_name>/` — Delete a file (form)
 
-This script sets `ENABLE_API_ENDPOINTS=true`, runs `manage.py test`, then restores the environment.
+All endpoints require authentication except signup and login. Deactivation will remove all user data and files. For JS clients, use appropriate headers and CSRF tokens. For HTML, use Django forms with `{% csrf_token %}`.
+
+## Feature Flags
+
+- The `ENABLE_API_ENDPOINTS` environment variable controls whether `/api/` routes are enabled.
+- During development, APIs are enabled if `DEBUG=True`.
+- Use `scripts/run_tests_with_api.sh` to run tests with API endpoints enabled.
+
+## Contributing
+
+- Fork the repo and create a feature branch.
+- Add or update tests for your changes.
+- Run all tests before submitting a pull request.
