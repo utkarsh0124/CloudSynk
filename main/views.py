@@ -174,8 +174,11 @@ class AddBlobAPIView(APIView):
             # handle error
             return Response({'success': False, 'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # For simplicity, assume fixed file size as in original views
-        file_size_bytes = 100
+        # get file size in bytes
+        file_size_bytes = uploaded.size
+        if file_size_bytes <= 0:
+            # handle error
+            return Response({'success': False, 'error': 'Uploaded file is empty'}, status=status.HTTP_400_BAD_REQUEST)
 
         api_instance = az_api.get_container_instance(user_info.user_name)
         if api_instance:
@@ -233,11 +236,11 @@ class HomeAPIView(APIView):
         if not request.user or not request.user.is_authenticated:
             return redirect(settings.LOGIN_URL)
 
-        user_info_qs = UserInfo.objects.filter(user=user).values()
-        if user_info_qs.count() != 1:
+        user_info_obj = UserInfo.objects.filter(user=user).values()
+        if user_info_obj.count() != 1:
             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
-
-        api_instance = az_api.get_container_instance(user_info_qs[0]['user_name'])
+        user_info_obj = user_info_obj[0]
+        api_instance = az_api.get_container_instance(user_info_obj['user_name'])
         if not api_instance:
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -256,5 +259,9 @@ class HomeAPIView(APIView):
             return Response({'success': True, 'blobs': blob_list, 'username': user.username}, status=status.HTTP_200_OK)
 
         # render HTML for normal browser navigation
-        context = {'success': True, 'blobs': blob_list, 'username': user.username}
+        context = {
+            'success': True, 
+            'user_info': user_info_obj,
+            'blobs': blob_list
+            }
         return render(request, 'main/sample.html', context)
