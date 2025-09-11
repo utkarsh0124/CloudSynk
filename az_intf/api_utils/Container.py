@@ -213,9 +213,11 @@ class Container:
                 logger.log(severity['INFO'], "STORAGE EXCEEDED")
                 return (False, assigned_blob_id)
 
-            # add debug log
-            logger.log(severity['DEBUG'], "BLOB CREATE : Quota check passed, proceeding to add blob to DB")
-
+            # add debug log with format print
+            logger.log(severity['DEBUG'], "BLOB CREATE : Quota OK for user : {}, Used : {}, Quota : {}".format(self.__user_name,
+                       self.__user_obj.storage_used_bytes,
+                       self.__user_obj.storage_quota_bytes))
+            
             # update and save user's storage usage
             self.__user_obj.storage_used_bytes += blob_size_bytes
             self.__user_obj.save()

@@ -25,7 +25,7 @@
             display: none;
             position: absolute;
             right: 0;
-            top: 100%;ī
+            top: 100%;
             z-index: 10;
         }
         .dropdown-container {
@@ -126,22 +126,27 @@
       <div class="w-64 bg-white shadow-lg flex flex-col border-r border-gray-200 z-20 hidden sm:flex">
       <div class="flex flex-col py-6 px-4 space-y-4">
         <!-- Profile Card -->
-        <div class="bg-gray-50 rounded-2xl shadow p-6 mb-2 flex flex-col justify-between" style="height: 110px;">
+        <div class="bg-gray-50 rounded-2xl shadow p-6 mb-2 flex flex-col justify-between" style="height: 130px;">
         <div class="flex items-center" style="margin-bottom: 4px; margin-top: -8px;">
-          <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ username }}" alt="Profile" class="w-12 h-12 rounded-full object-cover mr-3" />
-          <span class="font-semibold text-gray-800 text-lg">{{ username }}</span>
+          <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ user_info.user_name }}" alt="Profile" class="w-12 h-12 rounded-full object-cover mr-3" />
+          <span class="font-semibold text-gray-800 text-lg">{{ user_info.user_name }}</span>
         </div>
         <!-- Storage Status Bar -->
         <div class="w-full">
-          <div class="flex justify-between text-xs text-gray-500 mb-1">
-          <span>Storage Used</span>
-          <span>3.2 GB / 10 GB</span>
+          <div class="text-xs text-gray-500 mb-1">
+            <div id="storage-label">Storage Used</div>
+            <div id="storage-values" class="font-medium text-gray-800">{{ user_info.storage_used_bytes|filesizeformat }} / {{ user_info.storage_quota_bytes|filesizeformat }}</div>
           </div>
-          <div class="w-full bg-gray-200 rounded-full h-2">
-          <div class="bg-blue-500 h-2 rounded-full" style="width: 32%;"></div>
+          <!-- use data attributes to pass raw bytes to JS for accurate percentage calculation -->
+          <div class="w-full bg-gray-200 rounded-full h-2" id="storage-container" data-used="{{ user_info.storage_used_bytes }}" data-quota="{{ user_info.storage_quota_bytes }}" data-used-human="{{ user_info.storage_used_bytes|filesizeformat }}" data-quota-human="{{ user_info.storage_quota_bytes|filesizeformat }}">
+            <div id="storage-bar" class="bg-blue-500 h-2 rounded-full" style="width:0%" title="Storage usage"></div>
           </div>
         </div>
         </div>
+        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition mt-auto">
+        <i class="fas fa-sign-out-alt text-xl"></i>
+        <span>Downloads</span>
+        </a>
         <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">
         <i class="fas fa-cog text-xl"></i>
         <span>Settings</span>
@@ -149,10 +154,6 @@
         <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">  
         <i class="fas fa-question-circle text-xl"></i>
         <span>Help</span>
-        </a>
-        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition mt-auto">
-        <i class="fas fa-sign-out-alt text-xl"></i>
-        <span>Logout</span>
         </a>
       </div>
       </div>
@@ -233,6 +234,28 @@
           });
           // Initial state: show tile view
           $('.file-item-list').hide();
+
+          // Storage progress bar: compute percent from data attributes and update bar
+          (function() {
+            var $container = $('#storage-container');
+            if ($container.length) {
+              var used = parseFloat($container.attr('data-used')) || 0;
+              var quota = parseFloat($container.attr('data-quota')) || 0;
+              var percent = 0;
+              if (quota > 0) {
+                percent = (used / quota) * 100;
+              }
+              // clamp to 0-100 for visual width and set width
+              var percentClamped = Math.min(Math.max(percent, 0), 100);
+              $('#storage-bar').css('width', percentClamped.toFixed(2) + '%');
+              // set accessible attributes (do not change visible text)
+              $('#storage-bar').attr('title', 'Used ' + percentClamped.toFixed(2) + '% of total');
+              $('#storage-bar').attr('role', 'progressbar');
+              $('#storage-bar').attr('aria-valuemin', '0');
+              $('#storage-bar').attr('aria-valuemax', '100');
+              $('#storage-bar').attr('aria-valuenow', Math.round(percentClamped));
+            }
+          })();
         });
       </script>
       <style>
