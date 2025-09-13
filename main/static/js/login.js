@@ -1,96 +1,81 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const $ = jQuery; // Ensure jQuery is available
+// login.js: handles login form submission for SSR of sample.html
+$(function() {
+    const $form = $('#login-form');
+    const $btn = $('#login-btn');
+    const $text = $('#login-text');
+    const $spinner = $('#login-spinner');
+    const $alertContainer = $('#alert-container');
+    const $alertMessage = $('#alert-message');
 
-    // Read CSRF token safely
-    const csrftokenElem = document.querySelector('[name=csrfmiddlewaretoken]');
-    const csrftoken = csrftokenElem ? csrftokenElem.value : '';
+    function showAlert(message, type = 'error') {
+        const classes = type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+        $alertMessage.attr('class', classes).html(message);
+        $alertContainer.show();
+        setTimeout(() => $alertContainer.hide(), 5000);
+    }
 
-    // Note: This project exposes API endpoints under /api/ for XHR calls.
-    // Example fetch usage (see README):
-    // const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-    // fetch('/api/login/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrftoken }, credentials: 'same-origin', body: JSON.stringify({username, password}) })
-    //   .then(r => r.json()).then(console.log)
+    function hideAlert() {
+        $alertContainer.hide();
+    }
 
-    // Determine endpoint prefix based on feature flag injected into templates
-    const apiPrefix = (window.ENABLE_API_ENDPOINTS) ? '/api' : '';
+    function setLoading(isLoading) {
+        $btn.prop('disabled', isLoading);
+        $text.text(isLoading ? 'Signing In...' : 'Sign In');
+        $spinner.toggle(isLoading);
+    }
 
-    // New: Handle login form submission
-    $('form[action="/login/"]').on('submit', function(e) {
+    $form.on('submit', function(e) {
         e.preventDefault();
-        const form = $(this);
+        hideAlert();
+        setLoading(true);
         $.ajax({
-            url: apiPrefix + '/login/',
-            method: 'POST',
-            data: form.serialize(),
-            headers: { 'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest' },
-            dataType: 'json',
-            success: function(response, status, xhr) {
-                if (response.success) {
-                    window.location.href = response.redirect || '/';
+            url: '/login/',
+            type: 'POST',
+            data: new FormData(this),
+            processData: false,
+            contentType: false,
+            success(res) {
+                if (res.success) {
+                    window.location.href = '/home/';
                 } else {
-                    alert('Login failed: ' + (response.error || 'Unknown error'));
+                    showAlert(res.error || 'Invalid credentials');
+                    setLoading(false);
                 }
             },
-            error: function(xhr, status, error) {
-                alert('Login failed: ' + (xhr.responseJSON?.error || 'Server error'));
+            error(xhr) {
+                const msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Server error';
+                showAlert(msg);
+                setLoading(false);
             }
         });
     });
 
-    // New: Handle logout form submission
-    $('form[action="/logout/"]').on('submit', function(e) {
-        e.preventDefault();
-        const form = $(this);
-        $.ajax({
-            url: apiPrefix + '/logout/',
-            method: 'POST',
-            data: form.serialize(),
-            headers: { 'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest' },
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    window.location.href = '/login/'; // Adjust redirect URL
-                } else {
-                    alert('Logout failed: ' + (response.error || 'Unknown error'));
-                }
-            },
-            error: function(xhr) {
-                alert('Logout failed: ' + (xhr.responseJSON?.error || 'Server error'));
-            }
-        });
-    });
-
-    // New: Handle signup form submission (assumed in signup.html)
-    $('form[action="/signup/"]').on('submit', function(e) {
-        e.preventDefault();
-        const form = $(this);
-        const method = form.attr('method').toUpperCase();
-        if (method === 'POST') {
-            $.ajax({
-                url: apiPrefix + '/signup/',
-                method: 'POST',
-                data: form.serialize(),
-                headers: { 'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest' },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        window.location.href = '/'; // Adjust redirect URL
-                    } else {
-                        console.log("Line 77");
-                        alert('Signup failed: ' + (response.error || 'Unknown error'));
-                    }
-                },
-                error: function(xhr) {
-                    console.error('Signup AJAX error:', xhr.status, xhr.statusText, xhr.responseText);
-                    console.log("Line 82");
-                    alert('Signup failed: ' + (xhr.responseJSON?.error || 'Server error'));
-                }
-            });
-        }
-        else if (method === 'GET') {
-            window.location.href = '/signup/';
+    // Password show/hide
+    $('#toggle-password').on('click', function() {
+        const $pwd = $('#password');
+        const $icon = $(this).find('i');
+        if ($pwd.attr('type') === 'password') {
+            $pwd.attr('type', 'text');
+            $icon.removeClass('fa-eye').addClass('fa-eye-slash');
         } else {
-            console.error('Unsupported form method for signup:', method);
+            $pwd.attr('type', 'password');
+            $icon.removeClass('fa-eye-slash').addClass('fa-eye');
         }
     });
+
+    // Enter key submission
+    $('#username, #password').on('keypress', function(e) {
+        if (e.which === 13) {
+            $form.submit();
+        }
+    });
+
+    // Autofocus username
+    $('#username').focus();
+
+    // Logout success message
+    if (window.location.hash === '#logout') {
+        showAlert('You have been successfully logged out.', 'success');
+        history.replaceState(null, null, window.location.pathname);
+    }
 });

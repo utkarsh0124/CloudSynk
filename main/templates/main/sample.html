@@ -1,304 +1,150 @@
+{% extends 'main/base.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SimpleDrive</title>
-    <script src="{% static 'js/index.js' %}"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/js/all.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single:wght@100..900&family=Tilt+Neon&display=swap" rel="stylesheet">
-    <style>
-        .file-item:hover {
-            background-color: rgba(0, 0, 0, 0.05);
-        }
-        .selected {
-            background-color: rgba(66, 133, 244, 0.1);
-            border-left: 3px solid #4285f4;
-        }
-        .dropdown-menu {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 100%;
-            z-index: 10;
-        }
-        .dropdown-container {
-            position: relative;
-        }
-    /* Truncate long file names with ellipsis */
-    .truncate-name {
-      display: inline-block; /* needed for width to apply */
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: middle;
-    }
-    /* Constrain name inside tile so ellipsis appears earlier on narrow tiles */
-    .file-item-tile .truncate-name {
-      max-width: calc(100% - 48px); /* leave room for icon and padding */
-    }
-    </style>
-  </head>
-  <body>
-    <nav class="flex justify-between px-4 py-4 bg-gray-100 shadow-sm">
+
+{% block title %}CloudSynk - Dashboard{% endblock %}
+
+{% block body_class %}app-background{% endblock %}
+
+{% block background_pattern %}
+<!-- No background pattern for clean theme -->
+{% endblock %}
+
+{% block content %}
+<!-- Navigation Bar -->
+<nav class="flex justify-between px-4 py-4 bg-gray-100 shadow-sm">
     <div class="flex items-center">
-      <span style="font-family: 'Bitcount Prop Single', sans-serif; font-weight: 55     0; color: #222; font-size: 2rem;">Cloud</span>
-      <span style="font-family: 'Bitcount Prop Single', sans-serif; font-weight: 550; color: #174ea6; font-size: 2rem; margin-left: 4px;">Synk</span>
+        <span class="brand-text navbar-brand">Cloud</span>
+        <span class="brand-text navbar-brand-accent">Synk</span>
     </div>
-      </div>
-      <div>
-        {% comment %}search Bar{% endcomment %}
+    
+    <div>
+        <!-- Search Bar -->
         <form action="#" method="get" class="flex items-center bg-white rounded-full shadow px-3 py-1 w-72 focus-within:ring-2 focus-within:ring-blue-400 transition">
-          <input type="text" name="q" placeholder="Search files..." class="flex-grow bg-transparent outline-none text-gray-700 px-2 py-1" autocomplete="off" />
-          <button type="submit" class="text-blue-500 hover:text-blue-700 transition"><i class="fas fa-search"></i></button>
-        </form>
-      </div>
-      <style>
-            #dropdown-menu {
-            min-width: 80px !important;
-            width: 100px !important;
-            font-size: 0.95rem !important;
-            padding: 0.25rem 0 !important;
-            top: 60%; /* Move dropdown even closer to the SVG */
-            }
-            #dropdown-menu a {
-            padding-top: 0.25rem !important;
-            padding-bottom: 0.25rem !important;
-            font-size: 0.95rem !important;
-            }
-        </style>
-      <div class="relative">
-        <div id="menu-toggle" class="cursor-pointer">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-6 h-6 my-2">
-            <path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
-          </svg>
-        </div>
-        <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]">
-          <form action="{% url 'logout' %}" method="post" style="display:inline;">
-            {% csrf_token %}
-            <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0">Logout</button>
-          </form>
-          <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
-            {% csrf_token %}
-            <button type="button" id="deactivate-btn" class="block px-4 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0">Deactivate</button>
-          </form>
-
-          <!-- Modal for Deactivate Confirmation -->
-          <div id="deactivate-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
-            <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-              <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm Deactivation</h2>
-              <p class="mb-4 text-gray-700">Deactivating your account will permanently remove all your stored data. This action cannot be undone. Are you sure you want to continue?</p>
-              <div class="flex justify-end space-x-3">
-                <button id="cancel-deactivate" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
-                <button id="confirm-deactivate" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Deactivate</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <script>
-            $(document).ready(function() {
-            $('#dropdown-menu').hide();
-            $('#menu-toggle').on('click', function(e) {
-                e.stopPropagation();
-                $('#dropdown-menu').toggle();
-            });
-            $(document).on('click', function() {
-                $('#dropdown-menu').hide();
-            });
-            $('#dropdown-menu').on('click', function(e) {
-                e.stopPropagation();
-            });
-            });
-        </script>
-    </nav>
-
-    <div class="flex" style="height: calc(100vh - 80px);">
-      <!-- 80px = nav height -->
-      <!-- Left Side Panel Navigation -->
-      <div class="w-64 bg-white shadow-lg flex flex-col border-r border-gray-200 z-20 hidden sm:flex">
-      <div class="flex flex-col py-6 px-4 space-y-4">
-        <!-- Profile Card -->
-        <div class="bg-gray-50 rounded-2xl shadow p-6 mb-2 flex flex-col justify-between" style="height: 130px;">
-        <div class="flex items-center" style="margin-bottom: 4px; margin-top: -8px;">
-          <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ user_info.user_name }}" alt="Profile" class="w-12 h-12 rounded-full object-cover mr-3" />
-          <span class="font-semibold text-gray-800 text-lg">{{ user_info.user_name }}</span>
-        </div>
-        <!-- Storage Status Bar -->
-        <div class="w-full">
-          <div class="text-xs text-gray-500 mb-1">
-            <div id="storage-label">Storage Used</div>
-            <div id="storage-values" class="font-medium text-gray-800">{{ user_info.storage_used_bytes|filesizeformat }} / {{ user_info.storage_quota_bytes|filesizeformat }}</div>
-          </div>
-          <!-- use data attributes to pass raw bytes to JS for accurate percentage calculation -->
-          <div class="w-full bg-gray-200 rounded-full h-2" id="storage-container" data-used="{{ user_info.storage_used_bytes }}" data-quota="{{ user_info.storage_quota_bytes }}" data-used-human="{{ user_info.storage_used_bytes|filesizeformat }}" data-quota-human="{{ user_info.storage_quota_bytes|filesizeformat }}">
-            <div id="storage-bar" class="bg-blue-500 h-2 rounded-full" style="width:0%" title="Storage usage"></div>
-          </div>
-        </div>
-        </div>
-        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition mt-auto">
-        <i class="fas fa-sign-out-alt text-xl"></i>
-        <span>Downloads</span>
-        </a>
-        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">
-        <i class="fas fa-cog text-xl"></i>
-        <span>Settings</span>
-        </a>
-        <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">  
-        <i class="fas fa-question-circle text-xl"></i>
-        <span>Help</span>
-        </a>
-      </div>
-      </div>
-      
-      <!-- Scrollable Main Content Area -->
-      <div class="flex-1 overflow-y-auto bg-gray-50 p-8">
-      {% comment %} <h2 class="text-2xl font-semibold mb-6">Your Files</h2> {% endcomment %}
-      <div class="flex justify-start mb-6 items-center space-x-4">
-        <form id="upload-form" enctype="multipart/form-data" class="relative">
-        {% csrf_token %}
-        <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
-          <i class="fas fa-plus mr-2"></i>
-          <span>Add File</span>
-          <input id="file-upload" name="blob_file" type="file" class="hidden" />
-        </label>
-        </form>
-        <!-- View Toggle Buttons -->
-        <div class="flex items-center space-x-2">
-        <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View">
-          <i class="fas fa-th-large"></i>
-        </button>
-        <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View">
-          <i class="fas fa-list"></i>
-        </button>
-        </div>
-      </div>
-      <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {% for file in blobs %}
-        <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
-          <div class="flex items-center mb-2">
-          <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
-          <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</span>
-          </div>
-          <div class="text-xs text-gray-500 mb-1">Size: {{ file.size|filesizeformat }}</div>
-          <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at|date:'M d, Y H:i' }}</div>
-          <div class="flex items-center mt-2 space-x-3">
-          <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
-          <form action="{% url 'delete' file.blob_id %}" method="post" style="display:inline;">
-            {% csrf_token %}
-            <button type="submit" class="text-red-600 hover:underline text-sm flex items-center">
-            <i class="fas fa-trash-alt mr-1"></i>Delete
+            <input type="text" name="q" placeholder="Search files..." class="flex-grow bg-transparent outline-none text-gray-700 px-2 py-1" autocomplete="off" />
+            <button type="submit" class="text-blue-500 hover:text-blue-700 transition">
+                <i class="fas fa-search"></i>
             </button>
-          </form>
-          </div>
-        </div>
-        {% empty %}
-        <div class="col-span-full text-center text-gray-400">No files uploaded yet.</div>
-        {% endfor %}
-      </div>
-      <script>
-        $(document).ready(function() {
-          // Deactivate modal logic
-          $('#deactivate-btn').on('click', function(e) {
-            e.preventDefault();
-            $('#deactivate-modal').removeClass('hidden');
-          });
-          $('#cancel-deactivate').on('click', function() {
-            $('#deactivate-modal').addClass('hidden');
-          });
-          $('#confirm-deactivate').on('click', function() {
-            // Submit the deactivate form
-            $(this).closest('.dropdown-menu').find('form[action$="deactivate/"]').submit();
-          });
-
-          $('#tile-view-btn').on('click', function() {
-            $('#file-list-container')
-              .removeClass('flex flex-col')
-              .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
-            $('.file-item-tile').show();
-            $('.file-item-list').hide();
-          });
-          $('#list-view-btn').on('click', function() {
-            $('#file-list-container')
-              .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
-              .addClass('flex flex-col');
-            $('.file-item-tile').hide();
-            $('.file-item-list').show();
-          });
-          // Initial state: show tile view
-          $('.file-item-list').hide();
-
-          // Storage progress bar: compute percent from data attributes and update bar
-          (function() {
-            var $container = $('#storage-container');
-            if ($container.length) {
-              var used = parseFloat($container.attr('data-used')) || 0;
-              var quota = parseFloat($container.attr('data-quota')) || 0;
-              var percent = 0;
-              if (quota > 0) {
-                percent = (used / quota) * 100;
-              }
-              // clamp to 0-100 for visual width and set width
-              var percentClamped = Math.min(Math.max(percent, 0), 100);
-              $('#storage-bar').css('width', percentClamped.toFixed(2) + '%');
-              // set accessible attributes (do not change visible text)
-              $('#storage-bar').attr('title', 'Used ' + percentClamped.toFixed(2) + '% of total');
-              $('#storage-bar').attr('role', 'progressbar');
-              $('#storage-bar').attr('aria-valuemin', '0');
-              $('#storage-bar').attr('aria-valuemax', '100');
-              $('#storage-bar').attr('aria-valuenow', Math.round(percentClamped));
-            }
-          })();
-        });
-      </script>
-      <style>
-        /* List view styles */
-        .file-item-list {
-        display: flex;
-        align-items: center;
-        background: #fff;
-        border-radius: 0.5rem;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        padding: 1rem;
-        margin-bottom: 1rem;
-        }
-        .file-item-list .file-info {
-        flex: 1;
-        margin-left: 1rem;
-        }
-      </style>
-      <!-- Hidden list view markup for toggling -->
-      <div id="file-list-container-list" style="display:none;">
-        {% for file in blobs %}
-        <div class="file-item-list">
-          <i class="fas fa-file-alt text-blue-500 text-2xl"></i>
-          <div class="file-info">
-          <div class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</div>
-          <div class="text-xs text-gray-500">Size: {{ file.size|filesizeformat }}</div>
-          <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at|date:'M d, Y H:i' }}</div>
-          </div>
-          <div class="flex items-center space-x-3">
-          <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
-          <form action="{% url 'delete' file.blob_id %}" method="post" style="display:inline;">
-            {% csrf_token %}
-            <button type="submit" class="text-red-600 hover:underline text-sm flex items-center">
-            <i class="fas fa-trash-alt mr-1"></i>Delete
-            </button>
-          </form>
-          </div>
-        </div>
-        {% empty %}
-        <div class="text-center text-gray-400">No files uploaded yet.</div>
-        {% endfor %}
-      </div>
-      </div>
+        </form>
     </div>
-  </body>
-</html>
+    
+    <div class="relative">
+        <div id="menu-toggle" class="cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-6 h-6 my-2">
+                <path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
+            </svg>
+        </div>
+        <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]" style="min-width: 80px !important; width: 100px !important; font-size: 0.95rem !important; padding: 0.25rem 0 !important; top: 60%; display: none;">
+            <form action="{% url 'logout' %}" method="post" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Logout</button>
+            </form>
+            <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
+                {% csrf_token %}
+                <button type="button" id="deactivate-btn" class="block px-4 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Deactivate</button>
+            </form>
+            
+            <!-- Modal for Deactivate Confirmation -->
+            <div id="deactivate-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
+                <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
+                    <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm Deactivation</h2>
+                    <p class="mb-4 text-gray-700">Deactivating your account will permanently remove all your stored data. This action cannot be undone. Are you sure you want to continue?</p>
+                    <div class="flex justify-end space-x-3">
+                        <button id="cancel-deactivate" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                        <button id="confirm-deactivate" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Deactivate</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<div class="flex" style="height: calc(100vh - 80px);">
+    <!-- Left Side Panel Navigation -->
+    <div class="w-64 bg-white shadow-lg flex flex-col border-r border-gray-200 z-20 hidden sm:flex">
+        <div class="flex flex-col py-6 px-4 space-y-4">
+            <!-- Profile Card -->
+            <div class="bg-gray-50 rounded-2xl shadow p-6 mb-2 flex flex-col justify-between" style="height: 130px;">
+                <div class="flex items-center" style="margin-bottom: 4px; margin-top: -8px;">
+                    <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ user_info.user_name }}" alt="Profile" class="w-12 h-12 rounded-full object-cover mr-3" />
+                    <span class="font-semibold text-gray-800 text-lg">{{ user_info.user_name }}</span>
+                </div>
+                <!-- Storage Status Bar -->
+                <div class="w-full">
+                    <div class="text-xs text-gray-500 mb-1">
+                        <div>Storage Used</div>
+                        <div class="font-medium text-gray-800">{{ user_info.storage_used_bytes|filesizeformat }} / {{ user_info.storage_quota_bytes|filesizeformat }}</div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2" id="storage-container" data-used="{{ user_info.storage_used_bytes }}" data-quota="{{ user_info.storage_quota_bytes }}">
+                        <div id="storage-bar" class="bg-blue-500 h-2 rounded-full" style="width:0%" title="Storage usage"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition mt-auto">
+                <i class="fas fa-download text-xl"></i>
+                <span>Downloads</span>
+            </a>
+            <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">
+                <i class="fas fa-cog text-xl"></i>
+                <span>Settings</span>
+            </a>
+            <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">  
+                <i class="fas fa-question-circle text-xl"></i>
+                <span>Help</span>
+            </a>
+        </div>
+    </div>
+    
+    <!-- Scrollable Main Content Area -->
+    <div class="flex-1 overflow-y-auto bg-gray-50 p-8">
+        <div class="flex justify-start mb-6 items-center space-x-4">
+            <form id="upload-form" enctype="multipart/form-data" class="relative">
+                {% csrf_token %}
+                <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
+                    <i class="fas fa-plus mr-2"></i>
+                    <span>Add File</span>
+                    <input id="file-upload" name="blob_file" type="file" class="hidden" />
+                </label>
+            </form>
+            
+            <!-- View Toggle Buttons -->
+            <div class="flex items-center space-x-2">
+                <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View">
+                    <i class="fas fa-th-large"></i>
+                </button>
+                <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View">
+                    <i class="fas fa-list"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for file in blobs %}
+            <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
+                <div class="flex items-center mb-2">
+                    <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
+                    <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</span>
+                </div>
+                <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
+                <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at_formatted|default:"Unknown date" }}</div>
+                <div class="flex items-center mt-2 space-x-3">
+                    <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
+                    <form action="{% url 'delete' file.blob_id %}" method="post" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="text-red-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0">
+                            <i class="fas fa-trash-alt mr-1"></i>Delete
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-span-full text-center text-gray-400">No files uploaded yet.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/index.js' %}"></script>
+{% endblock %}

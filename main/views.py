@@ -14,11 +14,15 @@ from django.shortcuts import render
 from django.conf import settings
 from apiConfig import AZURE_API_DISABLE
 from datetime import datetime
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 def _is_api_request(request):
     """Return True if the request should be treated as an API/XHR call returning JSON.
-
-    Centralize content-negotiation to avoid brittle repeated checks.
+    
+    This helps distinguish between:
+    - AJAX requests from our SPA (should get JSON responses)
+    - Direct browser navigation (should get redirects/HTML)
     """
     accept = request.META.get('HTTP_ACCEPT', '')
     content_type = request.META.get('CONTENT_TYPE', '') or getattr(request, 'content_type', '') or ''
@@ -37,7 +41,19 @@ class SignupAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        return render(request, 'user/signup.html')
+        # Browser request: render signup template
+        if not _is_api_request(request):
+            return render(request, 'user/signup.html')
+        # API request: return signup form structure
+        return Response({
+            'success': True,
+            'form_fields': {
+                'username': {'type': 'text', 'required': True},
+                'email': {'type': 'email', 'required': True},
+                'password1': {'type': 'password', 'required': True},
+                'password2': {'type': 'password', 'required': True}
+            }
+        }, status=status.HTTP_200_OK)
 
     def post(self, request):
         data = request.data.copy()
@@ -75,61 +91,101 @@ class SignupAPIView(APIView):
             user.delete()
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        # If the request came from a browser/form, redirect to the login page (render if you prefer)
-        if not _is_api_request(request):
-            return redirect('/login/')  # or render(request, 'user/signup_success.html', {'user': user})
-
-        # Otherwise return JSON for API clients
-        return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
+        # API request: return JSON; browser request: redirect to login
+        if _is_api_request(request):
+            return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
+        return redirect('/login/')
 
 class LoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        # If already logged in, go to home
+        # If already logged in
         if request.user and request.user.is_authenticated:
-            return redirect('home')
+            # For API requests, return user info JSON
+            if _is_api_request(request):
+                return Response({
+                    'success': True, 
+                    'already_authenticated': True,
+                    'user': {
+                        'id': request.user.id,
+                        'username': request.user.username,
+                        'email': request.user.email
+                    }
+                }, status=status.HTTP_200_OK)
+            # For browser requests, redirect to home
+            return redirect('/')
+        
+        # For API requests, return form structure for frontend rendering
+        if _is_api_request(request):
+            return Response({
+                'success': True,
+                'form_fields': {
+                    'username': {'type': 'text', 'required': True},
+                    'password': {'type': 'password', 'required': True}
+                }
+            }, status=status.HTTP_200_OK)
+        
+        # For browser requests, render the login template
         return render(request, 'user/login.html')
 
     def post(self, request):
-        
+        # Authenticate credentials from JSON or form data
         username = request.data.get('username') or request.POST.get('username')
         password = request.data.get('password') or request.POST.get('password')
 
         user = authenticate(request, username=username, password=password)
         if user:
-            login(request, user)  # creates session cookie for session auth
-            # Session-based auth: do not create or return tokens
-            # treat JSON or XHR as API client
-
+            login(request, user)
+            # Browser form submission: redirect to home page
             if not _is_api_request(request):
-                # browser/form -> redirect to home
-                return redirect('home')
-            # API client -> return JSON success (session cookie is set)
+                return redirect('/home/')
+            # API request: return JSON success
             return Response({'success': True}, status=status.HTTP_200_OK)
 
-        return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+        # Authentication failed
+        if _is_api_request(request):
+            return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+        # Browser: re-render login with error message
+        return render(request, 'user/login.html', {'error': 'Invalid username or password'})
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class LogoutAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        # already authenticated -> go home
+        # For API requests, return logout confirmation
+        if _is_api_request(request):
+            if request.user and request.user.is_authenticated:
+                return Response({
+                    'success': True,
+                    'message': 'Ready to logout',
+                    'user': request.user.username
+                }, status=status.HTTP_200_OK)
+            
+            return Response({
+                'success': False,
+                'error': 'Not authenticated'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # For browser requests, perform logout and redirect
         if request.user and request.user.is_authenticated:
-            return redirect('/home/')  
-        # render the login page template (create main/templates/main/login.html)
-        return render(request, 'main/login.html')
+            logout(request)
+            az_api.del_container_instance(request.user.username)
+        return redirect('/login/')
 
     def post(self, request):
         logout(request)
         if not az_api.del_container_instance(request.user.username):
             return Response({'success': False, 'error': 'Error deleting container instance'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        if not _is_api_request(request):
-            return redirect('/home/')  
-        # Otherwise return JSON for API clients
-        return Response({'success': True}, status=status.HTTP_200_OK)
+        # For API requests, return JSON response
+        if _is_api_request(request):
+            return Response({'success': True}, status=status.HTTP_200_OK)
+        
+        # For browser requests, redirect to login
+        return redirect('/login/')
 
 
 class DeactivateUserAPIView(APIView):
@@ -144,12 +200,12 @@ class DeactivateUserAPIView(APIView):
             # Delete the user
             usr_obj.delete()
             logout(request)
-            if not _is_api_request(request):
-                return redirect('login')
+            # Always return JSON response
             return Response({'success': True, 'message': 'Account deactivated.'}, status=status.HTTP_200_OK)
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class AddBlobAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -191,15 +247,13 @@ class AddBlobAPIView(APIView):
             if not result:
                 return Response({'success': False, 'error': 'Blob creation failed'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # On success, return JSON for API clients
-            if _is_api_request(request):
-                return Response({'success': True, 'blob_id': blob_id}, status=status.HTTP_201_CREATED)
-            # browser/form -> redirect to home
-            return redirect('/home/')
+            # Always return JSON response
+            return Response({'success': True, 'blob_id': blob_id}, status=status.HTTP_201_CREATED)
         # If api_instance is None
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class DeleteBlobAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -218,11 +272,9 @@ class DeleteBlobAPIView(APIView):
         if api_instance:
             if not api_instance.blob_delete(blob_id):
                 return Response({'success': False, 'error': 'Blob deletion failed'}, status=status.HTTP_400_BAD_REQUEST)
-            # On success, return JSON for API clients
-            if _is_api_request(request):
-                return Response({'success': True}, status=status.HTTP_200_OK)
-            # browser/form -> redirect to home
-            return redirect('/home/')
+            
+            # Always return JSON response
+            return Response({'success': True}, status=status.HTTP_200_OK)
         # If api_instance is None
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -232,8 +284,12 @@ class HomeAPIView(APIView):
 
     def get(self, request):
         user = request.user
-        # Redirect unauthenticated users to Login view
+        # Handle unauthenticated users
         if not request.user or not request.user.is_authenticated:
+            # For API requests, return JSON error
+            if _is_api_request(request):
+                return Response({'success': False, 'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+            # For browser requests, redirect to login
             return redirect(settings.LOGIN_URL)
 
         user_info_obj = UserInfo.objects.filter(user=user).values()
@@ -246,22 +302,37 @@ class HomeAPIView(APIView):
 
         blob_list = api_instance.get_blob_list()
 
-        # convert numeric uploaded_at to datetime for the template
+        # convert numeric uploaded_at to datetime string for JSON serialization
         for blob_obj in blob_list:
             ts = blob_obj.get('uploaded_at')
             try:
-                blob_obj['uploaded_at_dt'] = datetime.fromtimestamp(float(ts)) if ts is not None else None
+                if ts is not None:
+                    dt = datetime.fromtimestamp(float(ts))
+                    blob_obj['uploaded_at_formatted'] = dt.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    blob_obj['uploaded_at_formatted'] = None
             except Exception:
-                blob_obj['uploaded_at_dt'] = None
+                blob_obj['uploaded_at_formatted'] = None
 
-        # Decide whether to return JSON (API client) or render HTML (browser)
+        # Always return JSON for SPA behavior - let frontend handle rendering
+        # But also support direct browser access by rendering template if not API request
         if _is_api_request(request):
-            return Response({'success': True, 'blobs': blob_list, 'username': user.username}, status=status.HTTP_200_OK)
-
-        # render HTML for normal browser navigation
-        context = {
-            'success': True, 
-            'user_info': user_info_obj,
-            'blobs': blob_list
+            return Response({
+                'success': True, 
+                'blobs': blob_list, 
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'is_authenticated': True
+                },
+                'user_info': user_info_obj
+            }, status=status.HTTP_200_OK)
+        else:
+            # For direct browser access, render the template
+            context = {
+                'success': True, 
+                'user_info': user_info_obj,
+                'blobs': blob_list
             }
-        return render(request, 'main/sample.html', context)
+            return render(request, 'main/sample.html', context)
