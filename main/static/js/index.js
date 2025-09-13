@@ -48,6 +48,50 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Delete file functionality using event delegation
+    $(document).on('click', '.file-delete-btn', function(e) {
+        e.preventDefault();
+        const deleteBtn = $(this);
+        const blobId = deleteBtn.data('blob-id');
+        
+        if (!blobId) {
+            alert('File ID not found');
+            return;
+        }
+        
+        const confirmed = confirm("Are you sure you want to delete this file?");
+        if (confirmed) {
+            const csrftoken = getCsrfToken();
+            
+            // Show loading state
+            const originalText = deleteBtn.html();
+            deleteBtn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Deleting...');
+            deleteBtn.prop('disabled', true);
+            
+            fetch(`/deleteFile/${blobId}/`, {
+                method: 'POST',
+                headers: csrftoken ? { 'X-CSRFToken': csrftoken } : {},
+                credentials: 'same-origin'
+            })
+            .then(res => {
+                if (res.ok) { 
+                    window.location = '/'; 
+                    return; 
+                }
+                alert('Delete failed');
+            })
+            .catch(err => { 
+                console.error('Delete error', err); 
+                alert('Delete error'); 
+            })
+            .finally(() => {
+                // Reset button state
+                deleteBtn.html(originalText);
+                deleteBtn.prop('disabled', false);
+            });
+        }
+    });
+
     // Dashboard behaviors moved from sample.html
     // Dropdown menu functionality
     $('#dropdown-menu').hide();
@@ -109,4 +153,21 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#storage-bar').attr('aria-valuenow', Math.round(percentClamped));
         }
     })();
+
+    // Mobile nav toggle
+    // Mobile nav toggle button handler
+    $('#nav-toggle-btn').on('click', function(e) {
+        e.stopPropagation();
+        $('#side-nav').toggleClass('-translate-x-full');
+    });
+    // Close side-nav when clicking outside on mobile
+    $(document).on('click', function(e) {
+        if (window.innerWidth < 640) { // only on mobile
+            const $nav = $('#side-nav');
+            if ($nav.hasClass('-translate-x-full')) return; // nav closed
+            if (!$(e.target).closest('#side-nav, #nav-toggle-btn').length) {
+                $nav.addClass('-translate-x-full');
+            }
+        }
+    });
 });

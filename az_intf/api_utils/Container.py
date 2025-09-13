@@ -28,6 +28,8 @@ class Container:
 
         # dictionary of key=blob name, value=blob object
         self.__blob_obj_dict = {blob_obj.blob_id: blob_obj for blob_obj in Blob.objects.filter(user_id=self.__user_obj.user_id)}
+        # add debug log 
+        logger.log(severity['DEBUG'], "CONTAINER INIT : User Name : {}, Container Name : {}, Blob Count : {}".format(username, self.__user_obj.container_name, len(self.__blob_obj_dict)))
 
     @staticmethod
     def user_exists(username:str):

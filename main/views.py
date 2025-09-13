@@ -35,8 +35,6 @@ def _is_api_request(request):
         or request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
     )
 
-
-
 class SignupAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -149,7 +147,6 @@ class LoginAPIView(APIView):
         # Browser: re-render login with error message
         return render(request, 'user/login.html', {'error': 'Invalid username or password'})
 
-
 @method_decorator(csrf_exempt, name='dispatch')
 class LogoutAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -187,7 +184,6 @@ class LogoutAPIView(APIView):
         # For browser requests, redirect to login
         return redirect('/login/')
 
-
 class DeactivateUserAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -203,7 +199,6 @@ class DeactivateUserAPIView(APIView):
             # Always return JSON response
             return Response({'success': True, 'message': 'Account deactivated.'}, status=status.HTTP_200_OK)
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AddBlobAPIView(APIView):
@@ -252,7 +247,6 @@ class AddBlobAPIView(APIView):
         # If api_instance is None
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 @method_decorator(csrf_exempt, name='dispatch')
 class DeleteBlobAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -277,7 +271,6 @@ class DeleteBlobAPIView(APIView):
             return Response({'success': True}, status=status.HTTP_200_OK)
         # If api_instance is None
         return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class HomeAPIView(APIView):
     permission_classes = [permissions.AllowAny]

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import os
 import random
 import string
-    
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 

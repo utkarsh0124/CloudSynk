@@ -1,149 +1,155 @@
 {% extends 'main/base.html' %}
 {% load static %}
 
-{% block title %}CloudSynk - Dashboard{% endblock %}
+{% block title %}
+  CloudSynk - Dashboard
+{% endblock %}
 
-{% block body_class %}app-background{% endblock %}
+{% block body_class %}
+  app-background
+{% endblock %}
 
 {% block background_pattern %}
-<!-- No background pattern for clean theme -->
+  <!-- No background pattern for clean theme -->
 {% endblock %}
 
 {% block content %}
-<!-- Navigation Bar -->
-<nav class="flex justify-between px-4 py-4 bg-gray-100 shadow-sm">
+  <!-- Navigation Bar -->
+  <nav class="flex justify-between px-4 py-4 bg-gray-100 shadow-sm">
     <div class="flex items-center">
-        <span class="brand-text navbar-brand">Cloud</span>
-        <span class="brand-text navbar-brand-accent">Synk</span>
+      <!-- Logo -->
+      <!-- Mobile nav toggle -->
+      <button id="nav-toggle-btn" class="block sm:hidden mr-4 text-gray-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
+      <!-- Logo for desktop -->
+      <span class="hidden sm:inline-block brand-text navbar-brand">Cloud</span>
+      <span class="hidden sm:inline-block brand-text navbar-brand-accent ml-1">Synk</span>
     </div>
-    
     <div>
-        <!-- Search Bar -->
-        <form action="#" method="get" class="flex items-center bg-white rounded-full shadow px-3 py-1 w-72 focus-within:ring-2 focus-within:ring-blue-400 transition">
-            <input type="text" name="q" placeholder="Search files..." class="flex-grow bg-transparent outline-none text-gray-700 px-2 py-1" autocomplete="off" />
-            <button type="submit" class="text-blue-500 hover:text-blue-700 transition">
-                <i class="fas fa-search"></i>
-            </button>
-        </form>
+      <!-- Search Bar -->
+      <form action="#" method="get" class="flex items-center bg-white rounded-full shadow px-3 py-1 w-72 focus-within:ring-2 focus-within:ring-blue-400 transition">
+        <input type="text" name="q" placeholder="Search files..." class="flex-grow bg-transparent outline-none text-gray-700 px-2 py-1" autocomplete="off" />
+        <button type="submit" class="text-blue-500 hover:text-blue-700 transition"><i class="fas fa-search"></i></button>
+      </form>
     </div>
-    
-    <div class="relative">
-        <div id="menu-toggle" class="cursor-pointer">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-6 h-6 my-2">
-                <path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
-            </svg>
-        </div>
-        <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]" style="min-width: 80px !important; width: 100px !important; font-size: 0.95rem !important; padding: 0.25rem 0 !important; top: 60%; display: none;">
-            <form action="{% url 'logout' %}" method="post" style="display:inline;">
-                {% csrf_token %}
-                <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Logout</button>
-            </form>
-            <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
-                {% csrf_token %}
-                <button type="button" id="deactivate-btn" class="block px-4 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Deactivate</button>
-            </form>
-        </div>
-        </div>
-        <!-- Modal for Deactivate Confirmation moved outside dropdown-menu -->
-        <div id="deactivate-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
-            <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-                <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm Deactivation</h2>
-                <p class="mb-4 text-gray-700">Deactivating your account will permanently remove all your stored data. This action cannot be undone. Are you sure you want to continue?</p>
-                <div class="flex justify-end space-x-3">
-                    <button id="cancel-deactivate" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
-                    <button id="confirm-deactivate" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Deactivate</button>
-                </div>
-            </div>
-        </div>
-</nav>
 
-<div class="flex" style="height: calc(100vh - 80px);">
-    <!-- Left Side Panel Navigation -->
-    <div class="w-64 bg-white shadow-lg flex flex-col border-r border-gray-200 z-20 hidden sm:flex">
-        <div class="flex flex-col py-6 px-4 space-y-4">
-            <!-- Profile Card -->
-            <div class="bg-gray-50 rounded-2xl shadow p-6 mb-2 flex flex-col justify-between" style="height: 130px;">
-                <div class="flex items-center" style="margin-bottom: 4px; margin-top: -8px;">
-                    <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ user_info.user_name }}" alt="Profile" class="w-12 h-12 rounded-full object-cover mr-3" />
-                    <span class="font-semibold text-gray-800 text-lg">{{ user_info.user_name }}</span>
-                </div>
-                <!-- Storage Status Bar -->
-                <div class="w-full">
-                    <div class="text-xs text-gray-500 mb-1">
-                        <div>Storage Used</div>
-                        <div class="font-medium text-gray-800">{{ user_info.storage_used_bytes|filesizeformat }} / {{ user_info.storage_quota_bytes|filesizeformat }}</div>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2" id="storage-container" data-used="{{ user_info.storage_used_bytes }}" data-quota="{{ user_info.storage_quota_bytes }}">
-                        <div id="storage-bar" class="bg-blue-500 h-2 rounded-full" style="width:0%" title="Storage usage"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition mt-auto">
-                <i class="fas fa-download text-xl"></i>
-                <span>Downloads</span>
-            </a>
-            <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">
-                <i class="fas fa-cog text-xl"></i>
-                <span>Settings</span>
-            </a>
-            <a href="#" class="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition">  
-                <i class="fas fa-question-circle text-xl"></i>
-                <span>Help</span>
-            </a>
-        </div>
+    <div class="relative">
+      <div id="menu-toggle" class="cursor-pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" class="w-6 h-6 my-2">
+          <path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
+        </svg>
+      </div>
+      <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]" style="min-width: 80px !important; width: 100px !important; font-size: 0.95rem !important; padding: 0.25rem 0 !important; top: 60%; display: none;">
+        <form action="{% url 'logout' %}" method="post" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Logout</button>
+        </form>
+        <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
+          {% csrf_token %}
+          <button type="button" id="deactivate-btn" class="block px-4 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Deactivate</button>
+        </form>
+      </div>
     </div>
-    
+    <!-- Modal for Deactivate Confirmation moved outside dropdown-menu -->
+    <div id="deactivate-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
+        <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm Deactivation</h2>
+        <p class="mb-4 text-gray-700">Deactivating your account will permanently remove all your stored data. This action cannot be undone. Are you sure you want to continue?</p>
+        <div class="flex justify-end space-x-3">
+          <button id="cancel-deactivate" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+          <button id="confirm-deactivate" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Deactivate</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="flex" style="height: calc(100vh - 80px);">
+    <!-- Left Side Panel Navigation -->
+    <div id="side-nav" class="fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg border-r border-gray-200 transform -translate-x-full transition-transform sm:static sm:translate-x-0 sm:flex">
+      <!-- App logo inside side-nav (mobile only) -->
+      <div class="flex items-center px-2 py-4 block sm:hidden">
+        <span class="brand-text navbar-brand">Cloud</span>
+        <span class="brand-text navbar-brand-accent ml-1">Synk</span>
+      </div>
+      <div class="flex flex-col sm:py-6 px-4 sm:px-2 space-y-2">
+        <!-- Profile Card -->
+        <div class="w-56 bg-gray-50 rounded-2xl shadow p-2 mb-4 flex flex-col justify-center" style="height: 160px;">
+          <div class="flex items-center ml-1 mr-1" style="margin-bottom: 8px; margin-top: -8px;">
+            <img src="https://api.dicebear.com/9.x/initials/svg?seed={{ user_info.user_name }}" alt="Profile" class="w-16 h-16 rounded-full object-cover mr-4" />
+            <span class="font-semibold text-gray-800 text-xl">{{ user_info.user_name }}</span>
+          </div>
+          <!-- Storage Status Bar -->
+          <div class="flex flex-col mt-2 ml-1 mr-2">
+            <div class="text-xs text-gray-500 mb-1">
+              <div>Storage Used</div>
+              <div class="font-medium text-gray-800">{{ user_info.storage_used_bytes|filesizeformat }} / {{ user_info.storage_quota_bytes|filesizeformat }}</div>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2" id="storage-container" data-used="{{ user_info.storage_used_bytes }}" data-quota="{{ user_info.storage_quota_bytes }}">
+              <div id="storage-bar" class="bg-blue-500 h-2 rounded-full" style="width:0%" title="Storage usage"></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+          <i class="fas fa-download text-xl ml-4"></i>
+          <span>Downloads</span>
+        </button>
+        <button class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+          <i class="fas fa-cog text-xl ml-4"></i>
+          <span>Settings</span>
+        </button>
+        <button class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+          <i class="fas fa-question-circle text-xl ml-4"></i>
+          <span>Help</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Scrollable Main Content Area -->
     <div class="flex-1 overflow-y-auto bg-gray-50 p-8">
-        <div class="flex justify-start mb-6 items-center space-x-4">
-            <form id="upload-form" enctype="multipart/form-data" class="relative">
-                {% csrf_token %}
-                <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
-                    <i class="fas fa-plus mr-2"></i>
-                    <span>Add File</span>
-                    <input id="file-upload" name="blob_file" type="file" class="hidden" />
-                </label>
-            </form>
-            
-            <!-- View Toggle Buttons -->
-            <div class="flex items-center space-x-2">
-                <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View">
-                    <i class="fas fa-th-large"></i>
-                </button>
-                <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View">
-                    <i class="fas fa-list"></i>
-                </button>
-            </div>
+      <div class="flex justify-start mb-6 items-center space-x-4">
+        <form id="upload-form" enctype="multipart/form-data" class="relative">
+          {% csrf_token %}
+          <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
+            <i class="fas fa-plus mr-2"></i>
+            <span>Add File</span>
+            <input id="file-upload" name="blob_file" type="file" class="hidden" />
+          </label>
+        </form>
+
+        <!-- View Toggle Buttons -->
+        <div class="flex items-center space-x-2">
+          <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View"><i class="fas fa-th-large"></i></button>
+          <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
         </div>
-        
-        <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {% for file in blobs %}
-            <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
-                <div class="flex items-center mb-2">
-                    <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
-                    <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</span>
-                </div>
-                <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
-                <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at_formatted|default:"Unknown date" }}</div>
-                <div class="flex items-center mt-2 space-x-3">
-                    <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
-                    <form action="{% url 'delete' file.blob_id %}" method="post" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="text-red-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0">
-                            <i class="fas fa-trash-alt mr-1"></i>Delete
-                        </button>
-                    </form>
-                </div>
+      </div>
+
+      <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for file in blobs %}
+          <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
+            <div class="flex items-center mb-2">
+              <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
+              <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</span>
             </div>
-            {% empty %}
-            <div class="col-span-full text-center text-gray-400">No files uploaded yet.</div>
-            {% endfor %}
-        </div>
+            <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
+            <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at_formatted|default:'Unknown date' }}</div>
+            <div class="flex items-center mt-2 space-x-3">
+              <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
+              <button class="file-delete-btn text-red-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0" 
+                      type="button" 
+                      data-blob-id="{{ file.blob_id }}">
+                <i class="fas fa-trash-alt mr-1"></i>
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        {% empty %}
+          <div class="col-span-full text-center text-gray-400">No files uploaded yet.</div>
+        {% endfor %}
+      </div>
     </div>
-</div>
+  </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/index.js' %}"></script>
+  <script src="{% static 'js/index.js' %}"></script>
 {% endblock %}
