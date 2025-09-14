@@ -129,18 +129,18 @@
 
         <!-- View Toggle Buttons -->
         <div class="flex items-center space-x-2">
-          <button id="list-view-btn" type="button" class="bg-blue-500 text-white px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
+          <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
           <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View"><i class="fas fa-th-large"></i></button>
         </div>
       </div>
 
-      <div id="file-list-container" class="flex flex-col">
+      <div id="file-list-container" class="">
         {% for file in blobs %}
           <!-- Tile View -->
           <div class="bg-white rounded-xl shadow p-4 flex flex-col file-item-tile" style="display: none;">
             <div class="flex items-center mb-2">
-              <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
-              <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</span>
+              <i class="file-icon text-blue-500 text-2xl mr-3" data-filename="{{ file.blob_name }}"></i>
+              <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name|slice:':-4' }}</span>
             </div>
             <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
             <div class="text-xs text-gray-400">Uploaded: {{ file.blob_uploaded_at_formatted|default:'Unknown date' }}</div>
@@ -166,9 +166,9 @@
           <!-- List View -->
           <div class="bg-white rounded-lg shadow p-3 flex items-center justify-between file-item-list mb-2">
             <div class="flex items-center flex-1">
-              <i class="fas fa-file-alt text-blue-500 text-lg mr-3"></i>
+              <i class="file-icon text-blue-500 text-lg mr-3" data-filename="{{ file.blob_name }}"></i>
               <div class="flex-1">
-                <div class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</div>
+                <div class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name|slice:':-4' }}</div>
                 <div class="text-xs text-gray-500">{{ file.blob_size|filesizeformat }} • {{ file.blob_uploaded_at_formatted|default:'Unknown date' }}</div>
               </div>
             </div>

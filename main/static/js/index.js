@@ -1,4 +1,104 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // File icon mapping based on extensions
+    function getFileIcon(filename) {
+        // Remove .zip suffix if present (files are stored as filename.ext.zip)
+        let cleanFilename = filename;
+        if (filename.toLowerCase().endsWith('.zip')) {
+            cleanFilename = filename.slice(0, -4); // Remove last 4 characters (.zip)
+        }
+        
+        const extension = cleanFilename.toLowerCase().split('.').pop();
+        const iconMappings = {
+            // Documents
+            'pdf': 'fas fa-file-pdf text-red-500',
+            'doc': 'fas fa-file-word text-blue-600',
+            'docx': 'fas fa-file-word text-blue-600',
+            'txt': 'fas fa-file-alt text-gray-600',
+            'rtf': 'fas fa-file-alt text-gray-600',
+            
+            // Spreadsheets
+            'xls': 'fas fa-file-excel text-green-600',
+            'xlsx': 'fas fa-file-excel text-green-600',
+            'csv': 'fas fa-file-csv text-green-500',
+            
+            // Presentations
+            'ppt': 'fas fa-file-powerpoint text-orange-600',
+            'pptx': 'fas fa-file-powerpoint text-orange-600',
+            
+            // Images
+            'jpg': 'fas fa-file-image text-purple-500',
+            'jpeg': 'fas fa-file-image text-purple-500',
+            'png': 'fas fa-file-image text-purple-500',
+            'gif': 'fas fa-file-image text-purple-500',
+            'bmp': 'fas fa-file-image text-purple-500',
+            'svg': 'fas fa-file-image text-purple-500',
+            'webp': 'fas fa-file-image text-purple-500',
+            
+            // Audio
+            'mp3': 'fas fa-file-audio text-green-500',
+            'wav': 'fas fa-file-audio text-green-500',
+            'flac': 'fas fa-file-audio text-green-500',
+            'aac': 'fas fa-file-audio text-green-500',
+            'ogg': 'fas fa-file-audio text-green-500',
+            
+            // Video
+            'mp4': 'fas fa-file-video text-red-600',
+            'avi': 'fas fa-file-video text-red-600',
+            'mkv': 'fas fa-file-video text-red-600',
+            'mov': 'fas fa-file-video text-red-600',
+            'wmv': 'fas fa-file-video text-red-600',
+            'webm': 'fas fa-file-video text-red-600',
+            
+            // Archives
+            'zip': 'fas fa-file-archive text-yellow-600',
+            'rar': 'fas fa-file-archive text-yellow-600',
+            '7z': 'fas fa-file-archive text-yellow-600',
+            'tar': 'fas fa-file-archive text-yellow-600',
+            'gz': 'fas fa-file-archive text-yellow-600',
+            
+            // Code
+            'js': 'fas fa-file-code text-yellow-500',
+            'html': 'fas fa-file-code text-orange-500',
+            'css': 'fas fa-file-code text-blue-400',
+            'py': 'fas fa-file-code text-blue-500',
+            'java': 'fas fa-file-code text-red-500',
+            'cpp': 'fas fa-file-code text-blue-700',
+            'c': 'fas fa-file-code text-blue-700',
+            'php': 'fas fa-file-code text-purple-600',
+            'rb': 'fas fa-file-code text-red-600',
+            'go': 'fas fa-file-code text-blue-400',
+            'rs': 'fas fa-file-code text-orange-600',
+            'json': 'fas fa-file-code text-green-600',
+            'xml': 'fas fa-file-code text-orange-400',
+            'yml': 'fas fa-file-code text-gray-600',
+            'yaml': 'fas fa-file-code text-gray-600',
+            
+            // Default
+            'default': 'fas fa-file-alt text-gray-500'
+        };
+        
+        return iconMappings[extension] || iconMappings['default'];
+    }
+    
+    // Initialize file icons
+    function initializeFileIcons() {
+        document.querySelectorAll('.file-icon').forEach(function(iconElement) {
+            const filename = iconElement.getAttribute('data-filename');
+            if (filename) {
+                const iconClasses = getFileIcon(filename);
+                iconElement.className = `file-icon text-2xl mr-3 ${iconClasses}`;
+                
+                // For list view, use smaller icon
+                if (iconElement.classList.contains('text-lg')) {
+                    iconElement.className = `file-icon text-lg mr-3 ${iconClasses}`;
+                }
+            }
+        });
+    }
+    
+    // Initialize icons on page load
+    initializeFileIcons();
+
     const fileInput = document.getElementById('file-upload');
     const uploadForm = document.getElementById('upload-form');
 
@@ -435,33 +535,55 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // View toggle functionality
+    // View toggle functionality with localStorage persistence
+    function setViewMode(mode) {
+        localStorage.setItem('cloudsynk-view-mode', mode);
+        
+        if (mode === 'tile') {
+            // Update button states
+            $('#tile-view-btn').removeClass('bg-gray-200 text-gray-700').addClass('bg-blue-500 text-white');
+            $('#list-view-btn').removeClass('bg-blue-500 text-white').addClass('bg-gray-200 text-gray-700');
+            
+            // Update layout
+            $('#file-list-container')
+                .removeClass('flex flex-col')
+                .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
+            $('.file-item-tile').show();
+            $('.file-item-list').hide();
+        } else {
+            // List view (default)
+            // Update button states
+            $('#list-view-btn').removeClass('bg-gray-200 text-gray-700').addClass('bg-blue-500 text-white');
+            $('#tile-view-btn').removeClass('bg-blue-500 text-white').addClass('bg-gray-200 text-gray-700');
+            
+            // Update layout
+            $('#file-list-container')
+                .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
+                .addClass('flex flex-col');
+            $('.file-item-tile').hide();
+            $('.file-item-list').show();
+        }
+    }
+    
+    // Load saved view mode on page load
+    function initializeViewMode() {
+        const savedMode = localStorage.getItem('cloudsynk-view-mode');
+        // Default to list view if no preference saved
+        const viewMode = savedMode || 'list';
+        setViewMode(viewMode);
+    }
+    
+    // Initialize view mode based on saved preference
+    initializeViewMode();
+    
+    // View toggle event handlers
     $('#tile-view-btn').on('click', function() {
-        // Update button states
-        $(this).removeClass('bg-gray-200 text-gray-700').addClass('bg-blue-500 text-white');
-        $('#list-view-btn').removeClass('bg-blue-500 text-white').addClass('bg-gray-200 text-gray-700');
-        
-        // Update layout
-        $('#file-list-container')
-            .removeClass('flex flex-col')
-            .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
-        $('.file-item-tile').show();
-        $('.file-item-list').hide();
+        setViewMode('tile');
     });
+    
     $('#list-view-btn').on('click', function() {
-        // Update button states
-        $(this).removeClass('bg-gray-200 text-gray-700').addClass('bg-blue-500 text-white');
-        $('#tile-view-btn').removeClass('bg-blue-500 text-white').addClass('bg-gray-200 text-gray-700');
-        
-        // Update layout
-        $('#file-list-container')
-            .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
-            .addClass('flex flex-col');
-        $('.file-item-tile').hide();
-        $('.file-item-list').show();
+        setViewMode('list');
     });
-    // Initial state: list view only (button already styled as selected in HTML)
-    $('.file-item-tile').hide();
 
     // Storage progress bar calculation
     (function() {
