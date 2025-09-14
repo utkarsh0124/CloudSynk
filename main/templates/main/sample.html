@@ -133,7 +133,15 @@
             <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
             <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at_formatted|default:'Unknown date' }}</div>
             <div class="flex items-center mt-2 space-x-3">
-              <a href="{{ file.download_url }}" class="text-blue-600 hover:underline text-sm">Download</a>
+              <button class="file-download-btn text-blue-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0" 
+                      type="button" 
+                      data-blob-id="{{ file.blob_id }}"
+                      data-blob-name="{{ file.blob_name }}"
+                      data-blob-size="{{ file.blob_size }}"
+                      >
+                <i class="fas fa-download mr-1"></i>
+                <span>Download</span>
+              </button>
               <button class="file-delete-btn text-red-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0" 
                       type="button" 
                       data-blob-id="{{ file.blob_id }}">

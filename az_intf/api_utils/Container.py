@@ -149,11 +149,29 @@ class Container:
             logger.log(severity['ERROR'], "BLOB DELETE ALL EXCEPTION : {}".format(error))
             delete_success = False
         return delete_success
-    
-    def get_blob_list(self):
+
+    def validate_new_blob_addition(self, new_blob_size, blob_name):
+        # validate against user's quota
+        if self.__user_obj.storage_used_bytes + new_blob_size > self.__user_obj.storage_quota_bytes:
+            logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : User Name : {}, Used : {}, Quota : {}, New Blob Size : {}".format(self.__user_name,
+                       self.__user_obj.storage_used_bytes,
+                       self.__user_obj.storage_quota_bytes,
+                       new_blob_size))
+            return (False, "Storage quota exceeded. Please delete some files before uploading new ones or Upgrade your Subscription")
+        # validate blob name uniqueness
+        if self.__blob_name_exists(blob_name):
+            logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(blob_name))
+            return (False, "Blob name already exists. Please use a different file.")
+        return (True, "Success")    
+
+    def get_blob_info(self, blob_id=None):
         try:
-            # use filter to get all blobs for this user; self.__user_obj.user_id is the User PK
-            blobs = Blob.objects.filter(user_id=self.__user_obj.user_id)
+            if blob_id:
+                # get specific blob in a list if blob_id provided
+                queryset = Blob.objects.filter(user_id=self.__user_obj.user_id, blob_id=blob_id)
+            else :
+                # use filter to get all blobs for this user; self.__user_obj.user_id is the User PK
+                queryset = Blob.objects.filter(user_id=self.__user_obj.user_id)
         except Exception as e:
             # unexpected errors (DB issues, etc.)
             logger.log(severity['ERROR'], "GET BLOB LIST EXCEPTION : {}".format(e))            
@@ -162,18 +180,13 @@ class Container:
             {
                 'blob_id' : b.blob_id,
                 'blob_name': b.blob_name,
-                'size': b.blob_size,
-                'uploaded_at': b.creation_time,
-                'download_url': f'/download/{b.blob_name}'  # adjust as needed
+                'blob_size': b.blob_size,
+                'blob_uploaded_at': b.creation_time,
+                'blob_uploaded_at_formatted': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(b.creation_time)) if b.creation_time else None
+                # 'blob_download_url': f'/download/{b.blob_name}'  # adjust as needed
             }
-            for b in blobs
+            for b in queryset
         ]
-    
-    def get_blob_size(self, blob_id:str):
-        if not self.__blob_id_exists(blob_id):
-            logger.log(severity['INFO'], "BLOB DOES NOT EXIST")
-            return 0
-        return self.__blob_obj_dict[blob_id].blob_size
 
     def get_upload_blob_sas_url(self, blob_id, expiry_hours=1):
         try:
@@ -196,6 +209,217 @@ class Container:
         except Exception as error:
             logger.log(severity['ERROR'], "GET BLOB SAS URL EXCEPTION : {}".format(error))
         return None
+
+    # def get_download_blob_sas_url(self, blob_id, expiry_hours=1):
+    #     try:
+    #         if not self.__blob_id_exists(blob_id):
+    #             logger.log(severity['ERROR'], "BLOB DOES NOT EXIST FOR DOWNLOAD")
+    #             return None
+    #         container_name = self.__user_obj.container_name
+    #         blob_name = self.__blob_obj_dict[blob_id].blob_name
+    #         sas_url = app_utils.get_blob_sas_url(
+    #             container_name=container_name,
+    #             blob_name=blob_name,
+    #             permission="r",
+    #             expiry_hours=expiry_hours
+    #         )
+    #         if sas_url is None:
+    #             logger.log(severity['ERROR'], "GET DOWNLOAD BLOB SAS URL FAILED")
+    #             return None
+    #         logger.log(severity['INFO'], "GET DOWNLOAD BLOB SAS URL SUCCESS")
+    #         return sas_url
+    #     except Exception as error:
+    #         logger.log(severity['ERROR'], "GET DOWNLOAD BLOB SAS URL EXCEPTION : {}".format(error))
+    #     return None
+
+    # def get_blob_info(self, blob_id):
+    #     """Get blob information by blob_id"""
+    #     try:
+    #         if not self.__blob_id_exists(blob_id):
+    #             logger.log(severity['ERROR'], "BLOB DOES NOT EXIST")
+    #             return None
+    #         blob_obj = self.__blob_obj_dict[blob_id]
+    #         return {
+    #             'blob_id': blob_obj.blob_id,
+    #             'blob_name': blob_obj.blob_name,
+    #             'blob_size': blob_obj.blob_size,
+    #             'blob_type': blob_obj.blob_type,
+    #             'creation_time': blob_obj.creation_time,
+    #             'last_modification_time': blob_obj.last_modification_time
+    #         }
+    #     except Exception as error:
+    #         logger.log(severity['ERROR'], "GET BLOB INFO EXCEPTION : {}".format(error))
+    #     return None
+
+    def get_blob_stream(self, blob_id):
+        """Get blob stream for direct download using service client"""
+        try:
+            if not self.__blob_id_exists(blob_id):
+                logger.log(severity['ERROR'], "BLOB DOES NOT EXIST FOR DOWNLOAD")
+                return None
+                
+            if self.__container_client is None:
+                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
+                return None
+                
+            blob_name = self.__blob_obj_dict[blob_id].blob_name
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            # Get the blob download stream
+            download_stream = blob_client.download_blob()
+            
+            logger.log(severity['INFO'], "GET BLOB STREAM SUCCESS : Blob ID : {}, Blob Name : {}".format(blob_id, blob_name))
+            return download_stream
+            
+        except Exception as error:
+            logger.log(severity['ERROR'], "GET BLOB STREAM EXCEPTION : {}".format(error))
+            return None
+
+    def get_blob_stream_range(self, blob_id, start_byte=0, end_byte=None):
+        """Get blob stream with range support for resumable downloads"""
+        try:
+            if not self.__blob_id_exists(blob_id):
+                logger.log(severity['ERROR'], "BLOB DOES NOT EXIST FOR DOWNLOAD")
+                return None
+                
+            if self.__container_client is None:
+                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
+                return None
+                
+            blob_name = self.__blob_obj_dict[blob_id].blob_name
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            # Calculate length for range request
+            if end_byte is None:
+                blob_properties = blob_client.get_blob_properties()
+                end_byte = blob_properties.size - 1
+                
+            length = end_byte - start_byte + 1
+            
+            # Download with range
+            download_stream = blob_client.download_blob(offset=start_byte, length=length)
+            
+            logger.log(severity['INFO'], "GET BLOB STREAM RANGE SUCCESS : Blob ID : {}, Blob Name : {} (bytes {}-{})".format(blob_id, blob_name, start_byte, end_byte))
+            return download_stream
+            
+        except Exception as error:
+            logger.log(severity['ERROR'], "GET BLOB STREAM RANGE EXCEPTION : {}".format(error))
+            return None
+
+    def store_upload_chunk(self, upload_id, chunk_index, chunk_data, file_name, total_chunks, total_size):
+        """Store individual upload chunk"""
+        try:
+            if self.__container_client is None:
+                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
+                return False
+                
+            # Create temp blob name for chunk
+            chunk_blob_name = "temp_uploads/{}/chunk_{:06d}".format(upload_id, chunk_index)
+            blob_client = self.__container_client.get_blob_client(chunk_blob_name)
+            
+            # Upload chunk
+            blob_client.upload_blob(chunk_data, overwrite=True)
+            
+            # Store metadata about the upload
+            metadata = {
+                'upload_id': upload_id,
+                'chunk_index': str(chunk_index),
+                'total_chunks': str(total_chunks),
+                'file_name': file_name,
+                'total_size': str(total_size),
+                'timestamp': str(time.time())
+            }
+            blob_client.set_blob_metadata(metadata)
+            
+            logger.log(severity['INFO'], "CHUNK UPLOAD SUCCESS : Upload ID : {}, Chunk : {}".format(upload_id, chunk_index))
+            return True
+            
+        except Exception as error:
+            logger.log(severity['ERROR'], "CHUNK UPLOAD EXCEPTION : {}".format(error))
+            return False
+
+    def finalize_chunked_upload(self, upload_id, file_name, total_size):
+        """Combine chunks into final blob"""
+        try:
+            if self.__container_client is None:
+                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
+                return None
+                
+            # List all chunks for this upload
+            chunk_prefix = "temp_uploads/{}/chunk_".format(upload_id)
+            chunks = []
+            
+            for blob in self.__container_client.list_blobs(name_starts_with=chunk_prefix):
+                chunks.append(blob)
+            
+            # Sort chunks by index
+            chunks.sort(key=lambda x: int(x.metadata.get('chunk_index', 0)))
+            
+            # Create final blob
+            final_blob_name = "{}_{}".format(int(time.time()), file_name)
+            final_blob_client = self.__container_client.get_blob_client(final_blob_name)
+            
+            # Combine chunks
+            from io import BytesIO
+            combined_data = BytesIO()
+            for chunk_blob in chunks:
+                chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
+                chunk_data = chunk_client.download_blob().readall()
+                combined_data.write(chunk_data)
+            
+            # Upload final blob
+            combined_data.seek(0)
+            final_blob_client.upload_blob(combined_data, overwrite=True)
+            
+            # Clean up chunks
+            for chunk_blob in chunks:
+                chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
+                chunk_client.delete_blob()
+            
+            # Add to database
+            result, blob_id = self.__add_blob_to_db(final_blob_name, total_size, "file")
+            if not result:
+                logger.log(severity['ERROR'], "FINALIZE CHUNKED UPLOAD : Failed to add to database")
+                return None
+            
+            logger.log(severity['INFO'], "CHUNKED UPLOAD FINALIZED : Upload ID : {} -> Blob ID : {}".format(upload_id, blob_id))
+            return blob_id
+            
+        except Exception as error:
+            logger.log(severity['ERROR'], "FINALIZE CHUNKED UPLOAD EXCEPTION : {}".format(error))
+            return None
+
+    def get_upload_status(self, upload_id):
+        """Get status of chunked upload for resume"""
+        try:
+            if self.__container_client is None:
+                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
+                return None
+                
+            chunk_prefix = "temp_uploads/{}/chunk_".format(upload_id)
+            chunks = []
+            
+            for blob in self.__container_client.list_blobs(name_starts_with=chunk_prefix):
+                chunk_index = int(blob.metadata.get('chunk_index', 0))
+                chunks.append({
+                    'index': chunk_index,
+                    'size': blob.size,
+                    'timestamp': blob.metadata.get('timestamp')
+                })
+            
+            # Sort by index
+            chunks.sort(key=lambda x: x['index'])
+            
+            logger.log(severity['DEBUG'], "UPLOAD STATUS : Upload ID : {}, Chunks : {}".format(upload_id, len(chunks)))
+            return {
+                'upload_id': upload_id,
+                'chunks_uploaded': len(chunks),
+                'chunks': chunks
+            }
+            
+        except Exception as error:
+            logger.log(severity['ERROR'], "GET UPLOAD STATUS EXCEPTION : {}".format(error))
+            return None
 
     def blob_create(self,blob_name:str, blob_size_bytes:int, blob_type:str="file", blob_file=None):
         # add debug log using format print
@@ -224,7 +448,7 @@ class Container:
             self.__user_obj.storage_used_bytes += blob_size_bytes
             self.__user_obj.save()
 
-            # Temporary server side AZURE API call to create a blob for a user 
+            # server side AZURE API call to create a blob for a user 
             #---------------------------------------------------------------------------
             if self.__container_client is not None:
                 if not blob_file:
@@ -237,9 +461,6 @@ class Container:
 
                     file_like = getattr(blob_file, "file", blob_file)
                     blob_client.upload_blob(file_like, overwrite=True)
-                    
-                    # with open(blob_file, "rb") as data:
-                    #     blob_client.upload_blob(data, overwrite=True)
                 logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(blob_name, self.__user_obj.container_name))
             else:
                 logger.log(severity['ERROR'], "BLOB CREATE FAILED : CONTAINER CLIENT NOT INITIALIZED")
@@ -292,9 +513,13 @@ class Container:
             logger.log(severity['INFO'], "BLOB DELETE : Blob ID : {}".format(blob_id))
             #---------------------------------------------------------------------------
 
-            size = self.get_blob_size(blob_id)
+            blob_info = self.get_blob_info(blob_id)
+            if not blob_info:
+                logger.log(severity['ERROR'], "BLOB INFO RETRIEVAL FAILED DURING DELETE")
+                return False
+            blob_info = blob_info[0]  # get the first item from the list
             # update and save this user's storage usage
-            self.__user_obj.storage_used_bytes = max(0, self.__user_obj.storage_used_bytes - size)
+            self.__user_obj.storage_used_bytes = max(0, self.__user_obj.storage_used_bytes - blob_info['blob_size'])
             self.__user_obj.save()
 
             if not self.__delete_blob_from_db(blob_id):

@@ -16,6 +16,9 @@ from apiConfig import AZURE_API_DISABLE
 from datetime import datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from storage_webapp import logger, severity
+from django.http import StreamingHttpResponse
+import requests
 
 def _is_api_request(request):
     """Return True if the request should be treated as an API/XHR call returning JSON.
@@ -191,14 +194,36 @@ class DeactivateUserAPIView(APIView):
         usr_obj = request.user
         api_instance = az_api.get_container_instance(usr_obj.username)
         if api_instance:
-            api_instance.container_delete(usr_obj)
-            az_api.del_container_instance(usr_obj.username)
-            # Delete the user
-            usr_obj.delete()
-            logout(request)
-            # Always return JSON response
-            return Response({'success': True, 'message': 'Account deactivated.'}, status=status.HTTP_200_OK)
-        return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            try:
+                # Delete container and all user data
+                api_instance.container_delete(usr_obj)
+                az_api.del_container_instance(usr_obj.username)
+                
+                # Delete the user
+                usr_obj.delete()
+                logout(request)
+                
+                # For API requests, return JSON response
+                if _is_api_request(request):
+                    return Response({'success': True, 'message': 'Account deactivated.'}, status=status.HTTP_200_OK)
+                
+                # For browser requests, redirect to login
+                return redirect('/login/')
+                
+            except Exception as e:
+                logger.log(severity['ERROR'], f"Deactivation error: {str(e)}")
+                
+                if _is_api_request(request):
+                    return Response({'success': False, 'error': f'Deactivation failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                # For browser requests, redirect back with error message
+                return redirect('/?error=deactivation_failed')
+        
+        # API instance failed
+        if _is_api_request(request):
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return redirect('/?error=api_instantiation_failed')
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AddBlobAPIView(APIView):
@@ -219,29 +244,24 @@ class AddBlobAPIView(APIView):
         file_name = request.data.get('file_name') or request.query_params.get('file_name')
         if not file_name:
             return Response({'success': False, 'error': 'Missing file name'}, status=status.HTTP_400_BAD_REQUEST)
-
-        uploaded = request.FILES.get('blob_file')
-        if not uploaded:
-            # handle error
-            return Response({'success': False, 'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
-
+        
         # get file size in bytes
-        file_size_bytes = uploaded.size
+        file_size_bytes = blob_file.size
         if file_size_bytes <= 0:
             # handle error
             return Response({'success': False, 'error': 'Uploaded file is empty'}, status=status.HTTP_400_BAD_REQUEST)
-
+        
         api_instance = az_api.get_container_instance(user_info.user_name)
         if api_instance:
-            # upload_sas_url = api_instance.get_blob_sas_url(blob_id, permission='w', expiry_hours=1)
-            # if not upload_sas_url:
-            #     return Response({'success': False, 'error': 'Failed to get upload SAS URL'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            result, blob_id = api_instance.blob_create(file_name, file_size_bytes, "file", uploaded)
+            blob_validation = api_instance.validate_new_blob_addition(file_size_bytes, file_name)
+            if not blob_validation[0]:
+                return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
+
+            result, blob_id = api_instance.blob_create(file_name, file_size_bytes, "file", blob_file)
             # add a debug log with format
-            print(['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}, blob_id : {}".format(file_name, file_size_bytes, "file", blob_id))
-            if not result:
+            if result == False:
                 return Response({'success': False, 'error': 'Blob creation failed'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Always return JSON response
             return Response({'success': True, 'blob_id': blob_id}, status=status.HTTP_201_CREATED)
         # If api_instance is None
@@ -255,7 +275,6 @@ class DeleteBlobAPIView(APIView):
         if not blob_id:
             return Response({'success': False, 'error': 'Missing blob ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        print("DELETE : Blob ID :", blob_id, ":")
         user_info = None
         try:
             user_info = UserInfo.objects.get(user=request.user)
@@ -293,19 +312,19 @@ class HomeAPIView(APIView):
         if not api_instance:
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        blob_list = api_instance.get_blob_list()
+        blob_list = api_instance.get_blob_info()
 
         # convert numeric uploaded_at to datetime string for JSON serialization
         for blob_obj in blob_list:
-            ts = blob_obj.get('uploaded_at')
+            ts = blob_obj['blob_uploaded_at']
             try:
                 if ts is not None:
                     dt = datetime.fromtimestamp(float(ts))
-                    blob_obj['uploaded_at_formatted'] = dt.strftime('%Y-%m-%d %H:%M:%S')
+                    blob_obj['blob_uploaded_at_formatted'] = dt.strftime('%Y-%m-%d %H:%M:%S')
                 else:
-                    blob_obj['uploaded_at_formatted'] = None
+                    blob_obj['blob_uploaded_at_formatted'] = None
             except Exception:
-                blob_obj['uploaded_at_formatted'] = None
+                blob_obj['blob_uploaded_at_formatted'] = None
 
         # Always return JSON for SPA behavior - let frontend handle rendering
         # But also support direct browser access by rendering template if not API request
@@ -329,3 +348,175 @@ class HomeAPIView(APIView):
                 'blobs': blob_list
             }
             return render(request, 'main/sample.html', context)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class DownloadBlobAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, blob_id=None):
+        if not blob_id:
+            return Response({'success': False, 'error': 'Missing blob ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Get blob info to verify ownership and get blob name
+        try:
+            blob_info = api_instance.get_blob_info(blob_id)
+            if not blob_info:
+                return Response({'success': False, 'error': 'Blob not found'}, status=status.HTTP_404_NOT_FOUND)
+            blob_info = blob_info[0]  # get the first item from the list
+        except Exception as e:
+            return Response({'success': False, 'error': f'Error retrieving blob info: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Parse Range header for resume support
+        range_header = request.META.get('HTTP_RANGE')
+        # get blob_size from list of blobs
+        file_size = blob_info['blob_size']
+        start = 0
+        end = file_size - 1
+
+        if range_header:
+            # Chunk based Downloading
+            # Parse "bytes=start-end" format
+            try:
+                range_match = range_header.replace('bytes=', '').split('-')
+                if range_match[0]:
+                    start = int(range_match[0])
+                if range_match[1]:
+                    end = int(range_match[1])
+            except (ValueError, IndexError):
+                return Response({'success': False, 'error': 'Invalid range header'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Stream the file through Django using direct service client with range support
+        try:
+            # Get blob stream with range support if specified
+            if range_header:
+                blob_stream = api_instance.get_blob_stream_range(blob_id, start, end)
+            else:
+                blob_stream = api_instance.get_blob_stream(blob_id)
+                
+            if not blob_stream:
+                return Response({'success': False, 'error': 'Failed to get blob stream'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Stream the file from Azure through our server
+            def file_generator():
+                try:
+                    for chunk in blob_stream.chunks():
+                        yield chunk
+                except Exception as e:
+                    logger.log(severity['ERROR'], f"Error streaming file: {str(e)}")
+                    raise
+
+            response = StreamingHttpResponse(
+                file_generator(),
+                content_type='application/octet-stream'
+            )
+            
+            # Set headers for resumable download
+            filename = blob_info['blob_name']
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response['Accept-Ranges'] = 'bytes'
+            
+            # Set partial content status if range request
+            if range_header:
+                response.status_code = 206  # Partial Content
+                response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                response['Content-Length'] = str(end - start + 1)
+            else:
+                response['Content-Length'] = str(file_size)
+            
+            return response
+            
+        except Exception as e:
+            return Response({'success': False, 'error': f'Error downloading file: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# @method_decorator(csrf_exempt, name='dispatch')
+# class ChunkedUploadAPIView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def post(self, request):
+#         """Handle chunked file upload with resume support"""
+#         user = request.user
+        
+#         try:
+#             user_info = UserInfo.objects.get(user=user)
+#         except UserInfo.DoesNotExist:
+#             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         # Get upload parameters
+#         upload_id = request.data.get('upload_id')
+#         chunk_index = int(request.data.get('chunk_index', 0))
+#         total_chunks = int(request.data.get('total_chunks', 1))
+#         file_name = request.data.get('file_name')
+#         total_size = int(request.data.get('total_size', 0))
+#         chunk_data = request.FILES.get('chunk')
+
+#         if not all([upload_id, file_name, chunk_data]):
+#             return Response({'success': False, 'error': 'Missing required parameters'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         api_instance = az_api.get_container_instance(user_info.user_name)
+#         if not api_instance:
+#             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+#         try:
+#             # Store chunk
+#             result = api_instance.store_upload_chunk(
+#                 upload_id=upload_id,
+#                 chunk_index=chunk_index,
+#                 chunk_data=chunk_data,
+#                 file_name=file_name,
+#                 total_chunks=total_chunks,
+#                 total_size=total_size
+#             )
+            
+#             if not result:
+#                 return Response({'success': False, 'error': 'Failed to store chunk'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+#             # Check if upload is complete
+#             if chunk_index == total_chunks - 1:
+#                 # Finalize upload
+#                 blob_id = api_instance.finalize_chunked_upload(upload_id, file_name, total_size)
+#                 if blob_id:
+#                     return Response({
+#                         'success': True, 
+#                         'completed': True,
+#                         'blob_id': blob_id,
+#                         'message': 'Upload completed'
+#                     }, status=status.HTTP_201_CREATED)
+#                 else:
+#                     return Response({'success': False, 'error': 'Failed to finalize upload'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+#             return Response({
+#                 'success': True,
+#                 'completed': False,
+#                 'chunk_index': chunk_index,
+#                 'message': f'Chunk {chunk_index + 1}/{total_chunks} uploaded'
+#             }, status=status.HTTP_200_OK)
+            
+#         except Exception as e:
+#             return Response({'success': False, 'error': f'Upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+#     def get(self, request):
+#         """Get upload status for resume"""
+#         upload_id = request.query_params.get('upload_id')
+#         if not upload_id:
+#             return Response({'success': False, 'error': 'Missing upload_id'}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         try:
+#             user_info = UserInfo.objects.get(user=request.user)
+#         except UserInfo.DoesNotExist:
+#             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         api_instance = az_api.get_container_instance(user_info.user_name)
+#         if not api_instance:
+#             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+#         upload_status = api_instance.get_upload_status(upload_id)
+#         return Response({'success': True, 'upload_status': upload_status}, status=status.HTTP_200_OK)
