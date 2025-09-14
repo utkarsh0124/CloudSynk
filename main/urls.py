@@ -12,7 +12,7 @@ urlpatterns = [
     path("deleteFile/<str:blob_id>/", views.DeleteBlobAPIView.as_view(), name="delete"),
     path("addFile/", views.AddBlobAPIView.as_view(), name="add"),
     path("downloadFile/<str:blob_id>/", views.DownloadBlobAPIView.as_view(), name="download"),
-    # path("chunkedUpload/", views.ChunkedUploadAPIView.as_view(), name="chunked_upload"),
+    path("chunkedUpload/", views.ChunkedUploadAPIView.as_view(), name="chunked_upload"),
 ]
 
 # Conditionally include API-only endpoints. This keeps production URL space free of

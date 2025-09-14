@@ -214,9 +214,13 @@
           </div>
         </div>
 
-        <button class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
-          <i class="fas fa-download text-xl ml-4"></i>
-          <span>Downloads</span>
+        <button id="transfer-manager-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+          <i class="fas fa-exchange-alt text-xl ml-4"></i>
+          <span>Transfers</span>
+        </button>
+        <button id="history-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+          <i class="fas fa-history text-xl ml-4"></i>
+          <span>History</span>
         </button>
         <button id="settings-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
           <i class="fas fa-cog text-xl ml-4"></i>
@@ -231,7 +235,14 @@
 
     <!-- Scrollable Main Content Area -->
     <div class="flex-1 overflow-y-auto bg-gray-50 p-8">
-      <div class="flex justify-start mb-6 items-center space-x-4">
+      <div class="flex justify-between mb-6 items-center">
+        <!-- View Toggle Buttons - Left side -->
+        <div class="flex items-center space-x-2">
+          <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
+          <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View"><i class="fas fa-th-large"></i></button>
+        </div>
+
+        <!-- Upload Form - Right side -->
         <form id="upload-form" enctype="multipart/form-data" class="relative">
           {% csrf_token %}
           <label for="file-upload" class="flex items-center w-24 space-x-1 text-gray-700 hover:text-white hover:bg-blue-500 transition mt-auto ml-1 py-2 rounded-3xl border-2 border-blue-200 border-transparent hover:border-0 hover:shadow-sm active:bg-blue-100">
@@ -239,12 +250,6 @@
             <input id="file-upload" name="blob_file" type="file" class="hidden" />
           </label>
         </form>
-
-        <!-- View Toggle Buttons -->
-        <div class="flex items-center space-x-2">
-          <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
-          <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View"><i class="fas fa-th-large"></i></button>
-        </div>
       </div>
 
       <div id="file-list-container" class="">
@@ -311,5 +316,7 @@
 {% endblock %}
 
 {% block extra_js %}
+  <script src="{% static 'js/historyManager.js' %}"></script>
+  <script src="{% static 'js/transferManager.js' %}"></script>
   <script src="{% static 'js/index.js' %}"></script>
 {% endblock %}

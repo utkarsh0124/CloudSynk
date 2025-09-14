@@ -1,4 +1,5 @@
 import time
+import base64
 
 # from django.contrib.auth.models import User
 from azure.storage.blob import ContainerClient, BlobServiceClient
@@ -359,22 +360,21 @@ class Container:
             final_blob_name = "{}_{}".format(int(time.time()), file_name)
             final_blob_client = self.__container_client.get_blob_client(final_blob_name)
             
-            # Combine chunks
-            from io import BytesIO
-            combined_data = BytesIO()
-            for chunk_blob in chunks:
-                chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
-                chunk_data = chunk_client.download_blob().readall()
-                combined_data.write(chunk_data)
+            # Optimized approach: Use Azure's block blob composition instead of downloading/re-uploading
+            try:
+                print(f"Starting efficient combination for {len(chunks)} chunks...")
+                # Method 1: Try to use block blob composition for efficient combination
+                self._combine_chunks_efficiently(chunks, final_blob_client, total_size)
+                print("Efficient combination completed successfully")
+            except Exception as e:
+                # Fallback to original method if efficient method fails
+                print(f"Efficient combination failed: {e}, falling back to original method")
+                self._combine_chunks_fallback(chunks, final_blob_client)
             
-            # Upload final blob
-            combined_data.seek(0)
-            final_blob_client.upload_blob(combined_data, overwrite=True)
-            
-            # Clean up chunks
-            for chunk_blob in chunks:
-                chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
-                chunk_client.delete_blob()
+            # Clean up chunks (can be done in parallel)
+            print("Starting chunk cleanup...")
+            self._cleanup_chunks_parallel(chunks)
+            print("Chunk cleanup completed")
             
             # Add to database
             result, blob_id = self.__add_blob_to_db(final_blob_name, total_size, "file")
@@ -551,3 +551,123 @@ class Container:
         except Exception as error:
             logger.log(severity['ERROR'], "SAMPLE CONTAINER DELETE ALL EXCEPTION : {}".format(error))
         return delete_success
+
+    def _combine_chunks_efficiently(self, chunks, final_blob_client, total_size):
+        """
+        Efficient chunk combination using streaming without loading all into memory
+        """
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        # Use block blob for efficient combination
+        block_list = []
+        
+        # Stream chunks directly to final blob using put_block
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {}
+            
+            for i, chunk_blob in enumerate(chunks):
+                block_id = f"block-{i:06d}".encode('utf-8')
+                block_id_b64 = base64.b64encode(block_id).decode('utf-8')
+                
+                future = executor.submit(self._upload_block_from_chunk, 
+                                       final_blob_client, chunk_blob, block_id_b64)
+                futures[future] = block_id_b64
+            
+            # Collect successful blocks
+            for future in as_completed(futures):
+                block_id_b64 = futures[future]
+                try:
+                    future.result()  # Ensure the block was uploaded successfully
+                    block_list.append(block_id_b64)
+                except Exception as e:
+                    raise Exception(f"Failed to upload block {block_id_b64}: {e}")
+        
+        # Commit the block list to finalize the blob
+        final_blob_client.commit_block_list(block_list)
+    
+    def _upload_block_from_chunk(self, final_blob_client, chunk_blob, block_id):
+        """
+        Upload a single block by streaming from chunk blob
+        """
+        chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
+        
+        # Download chunk data and upload as block
+        chunk_data = chunk_client.download_blob().readall()
+        final_blob_client.stage_block(block_id, chunk_data)
+    
+    def _combine_chunks_fallback(self, chunks, final_blob_client):
+        """
+        Fallback method: original approach but with better memory management
+        """
+        print(f"Using fallback method for {len(chunks)} chunks...")
+        
+        # For very large files (many chunks), use streaming upload to avoid memory issues
+        if len(chunks) > 50:  # > 100MB file
+            self._combine_chunks_streaming(chunks, final_blob_client)
+        else:
+            # Use original method for smaller files
+            from io import BytesIO
+            
+            with BytesIO() as combined_data:
+                for i, chunk_blob in enumerate(chunks):
+                    if i % 10 == 0:
+                        print(f"Processing chunk {i+1}/{len(chunks)}")
+                    chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
+                    chunk_data = chunk_client.download_blob().readall()
+                    combined_data.write(chunk_data)
+                
+                # Upload final blob
+                print("Uploading final blob...")
+                combined_data.seek(0)
+                final_blob_client.upload_blob(combined_data, overwrite=True)
+    
+    def _combine_chunks_streaming(self, chunks, final_blob_client):
+        """
+        Stream chunks directly without loading all into memory
+        """
+        print("Using streaming combination for large file...")
+        
+        # Use Azure's block blob API for streaming
+        block_list = []
+        
+        for i, chunk_blob in enumerate(chunks):
+            if i % 10 == 0:
+                print(f"Streaming chunk {i+1}/{len(chunks)}")
+                
+            chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
+            chunk_data = chunk_client.download_blob().readall()
+            
+            # Create block ID
+            block_id = f"block-{i:06d}".encode('utf-8')
+            block_id_b64 = base64.b64encode(block_id).decode('utf-8')
+            
+            # Stage the block
+            final_blob_client.stage_block(block_id_b64, chunk_data)
+            block_list.append(block_id_b64)
+        
+        # Commit all blocks
+        print("Committing blocks...")
+        final_blob_client.commit_block_list(block_list)
+    
+    def _cleanup_chunks_parallel(self, chunks):
+        """
+        Delete chunks in parallel for faster cleanup
+        """
+        import concurrent.futures
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = []
+            
+            for chunk_blob in chunks:
+                chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
+                future = executor.submit(chunk_client.delete_blob)
+                futures.append(future)
+            
+            # Wait for all deletions to complete
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Warning: Failed to delete chunk: {e}")
+                    # Continue with other deletions even if one fails

@@ -9,5 +9,5 @@ urlpatterns = [
     path('deleteFile/<str:blob_id>/', views.DeleteBlobAPIView.as_view(), name='api_delete'),
     path('addFile/', views.AddBlobAPIView.as_view(), name='api_add'),
     path('downloadFile/<str:blob_id>/', views.DownloadBlobAPIView.as_view(), name='api_download'),
-    # path('chunkedUpload/', views.ChunkedUploadAPIView.as_view(), name='api_chunked_upload'),
+    path('chunkedUpload/', views.ChunkedUploadAPIView.as_view(), name='api_chunked_upload'),
 ]

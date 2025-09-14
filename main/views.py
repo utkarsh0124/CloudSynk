@@ -437,86 +437,86 @@ class DownloadBlobAPIView(APIView):
         except Exception as e:
             return Response({'success': False, 'error': f'Error downloading file: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# @method_decorator(csrf_exempt, name='dispatch')
-# class ChunkedUploadAPIView(APIView):
-#     permission_classes = [IsAuthenticated]
+@method_decorator(csrf_exempt, name='dispatch')
+class ChunkedUploadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
-#     def post(self, request):
-#         """Handle chunked file upload with resume support"""
-#         user = request.user
+    def post(self, request):
+        """Handle chunked file upload with resume support"""
+        user = request.user
         
-#         try:
-#             user_info = UserInfo.objects.get(user=user)
-#         except UserInfo.DoesNotExist:
-#             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user_info = UserInfo.objects.get(user=user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-#         # Get upload parameters
-#         upload_id = request.data.get('upload_id')
-#         chunk_index = int(request.data.get('chunk_index', 0))
-#         total_chunks = int(request.data.get('total_chunks', 1))
-#         file_name = request.data.get('file_name')
-#         total_size = int(request.data.get('total_size', 0))
-#         chunk_data = request.FILES.get('chunk')
+        # Get upload parameters
+        upload_id = request.data.get('upload_id')
+        chunk_index = int(request.data.get('chunk_index', 0))
+        total_chunks = int(request.data.get('total_chunks', 1))
+        file_name = request.data.get('file_name')
+        total_size = int(request.data.get('total_size', 0))
+        chunk_data = request.FILES.get('chunk')
 
-#         if not all([upload_id, file_name, chunk_data]):
-#             return Response({'success': False, 'error': 'Missing required parameters'}, status=status.HTTP_400_BAD_REQUEST)
+        if not all([upload_id, file_name, chunk_data]):
+            return Response({'success': False, 'error': 'Missing required parameters'}, status=status.HTTP_400_BAD_REQUEST)
 
-#         api_instance = az_api.get_container_instance(user_info.user_name)
-#         if not api_instance:
-#             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-#         try:
-#             # Store chunk
-#             result = api_instance.store_upload_chunk(
-#                 upload_id=upload_id,
-#                 chunk_index=chunk_index,
-#                 chunk_data=chunk_data,
-#                 file_name=file_name,
-#                 total_chunks=total_chunks,
-#                 total_size=total_size
-#             )
+        try:
+            # Store chunk
+            result = api_instance.store_upload_chunk(
+                upload_id=upload_id,
+                chunk_index=chunk_index,
+                chunk_data=chunk_data,
+                file_name=file_name,
+                total_chunks=total_chunks,
+                total_size=total_size
+            )
             
-#             if not result:
-#                 return Response({'success': False, 'error': 'Failed to store chunk'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            if not result:
+                return Response({'success': False, 'error': 'Failed to store chunk'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
-#             # Check if upload is complete
-#             if chunk_index == total_chunks - 1:
-#                 # Finalize upload
-#                 blob_id = api_instance.finalize_chunked_upload(upload_id, file_name, total_size)
-#                 if blob_id:
-#                     return Response({
-#                         'success': True, 
-#                         'completed': True,
-#                         'blob_id': blob_id,
-#                         'message': 'Upload completed'
-#                     }, status=status.HTTP_201_CREATED)
-#                 else:
-#                     return Response({'success': False, 'error': 'Failed to finalize upload'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Check if upload is complete
+            if chunk_index == total_chunks - 1:
+                # Finalize upload synchronously but with progress updates
+                blob_id = api_instance.finalize_chunked_upload(upload_id, file_name, total_size)
+                if blob_id:
+                    return Response({
+                        'success': True, 
+                        'completed': True,
+                        'blob_id': blob_id,
+                        'message': 'Upload completed'
+                    }, status=status.HTTP_201_CREATED)
+                else:
+                    return Response({'success': False, 'error': 'Failed to finalize upload'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
-#             return Response({
-#                 'success': True,
-#                 'completed': False,
-#                 'chunk_index': chunk_index,
-#                 'message': f'Chunk {chunk_index + 1}/{total_chunks} uploaded'
-#             }, status=status.HTTP_200_OK)
+            return Response({
+                'success': True,
+                'completed': False,
+                'chunk_index': chunk_index,
+                'message': f'Chunk {chunk_index + 1}/{total_chunks} uploaded'
+            }, status=status.HTTP_200_OK)
             
-#         except Exception as e:
-#             return Response({'success': False, 'error': f'Upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({'success': False, 'error': f'Upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-#     def get(self, request):
-#         """Get upload status for resume"""
-#         upload_id = request.query_params.get('upload_id')
-#         if not upload_id:
-#             return Response({'success': False, 'error': 'Missing upload_id'}, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        """Get upload status for resume"""
+        upload_id = request.query_params.get('upload_id')
+        if not upload_id:
+            return Response({'success': False, 'error': 'Missing upload_id'}, status=status.HTTP_400_BAD_REQUEST)
         
-#         try:
-#             user_info = UserInfo.objects.get(user=request.user)
-#         except UserInfo.DoesNotExist:
-#             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-#         api_instance = az_api.get_container_instance(user_info.user_name)
-#         if not api_instance:
-#             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-#         upload_status = api_instance.get_upload_status(upload_id)
-#         return Response({'success': True, 'upload_status': upload_status}, status=status.HTTP_200_OK)
+        upload_status = api_instance.get_upload_status(upload_id)
+        return Response({'success': True, 'upload_status': upload_status}, status=status.HTTP_200_OK)
