@@ -473,20 +473,74 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Dashboard behaviors moved from sample.html
-    // Dropdown menu functionality
-    $('#dropdown-menu').hide();
-    $('#menu-toggle').on('click', function(e) {
-        e.stopPropagation();
-        $('#dropdown-menu').toggle();
-    });
-    $(document).on('click', function() {
-        $('#dropdown-menu').hide();
-    });
-    $('#dropdown-menu').on('click', function(e) {
-        e.stopPropagation();
-    });
-
-    // Deactivate modal functionality
+    // Dropdown menu functionality with smooth animations
+    $(document).ready(function() {
+        const $dropdown = $('#dropdown-menu');
+        
+        // Initialize dropdown as hidden
+        $dropdown.hide().css({
+            'transform': 'scale(0.095)',
+            'opacity': '0',
+            'transform-origin': 'top right'
+        });
+        
+        function showDropdown() {
+            $dropdown.show().css({
+                'transform': 'scale(0.095)',
+                'opacity': '0'
+            }).animate({
+                'opacity': '1'
+            }, {
+                duration: 0.01,
+                easing: 'swing',
+                step: function(now, fx) {
+                    if (fx.prop === 'opacity') {
+                        const scale = 0.95 + (now * 0.05); // Scale from 0.95 to 1.0
+                        $(this).css('transform', `scale(${scale})`);
+                    }
+                }
+            });
+        }
+        
+        function hideDropdown() {
+            $dropdown.animate({
+                'opacity': '0'
+            }, {
+                duration: 0.01,
+                easing: 'swing',
+                step: function(now, fx) {
+                    if (fx.prop === 'opacity') {
+                        const scale = 0.95 + (now * 0.05); // Scale from current to 0.95
+                        $(this).css('transform', `scale(${scale})`);
+                    }
+                },
+                complete: function() {
+                    $(this).hide();
+                }
+            });
+        }
+        
+        $('#menu-toggle').on('click', function(e) {
+            console.log('Menu toggle clicked - using smooth animation');
+            e.stopPropagation();
+            
+            if ($dropdown.is(':visible') && $dropdown.css('opacity') == '1') {
+                hideDropdown();
+            } else {
+                showDropdown();
+            }
+        });
+        
+        $(document).on('click', function() {
+            if ($dropdown.is(':visible')) {
+                hideDropdown();
+            }
+        });
+        
+        $('#dropdown-menu').on('click', function(e) {
+            e.stopPropagation();
+        });
+    });    // Deactivate modal functionality
     $('#deactivate-btn').on('click', function(e) {
         e.preventDefault();
         $('#deactivate-modal').removeClass('hidden');
@@ -532,6 +586,46 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             console.error('Deactivate form not found');
             alert('Error: Deactivate form not found');
+        }
+    });
+
+    // Settings modal functionality
+    $('#settings-btn').on('click', function(e) {
+        e.preventDefault();
+        $('#settings-modal').removeClass('hidden');
+    });
+    
+    $('#close-settings, #close-settings-bottom').on('click', function() {
+        $('#settings-modal').addClass('hidden');
+    });
+    
+    // Close settings modal when clicking outside
+    $('#settings-modal').on('click', function(e) {
+        if (e.target === this) {
+            $('#settings-modal').addClass('hidden');
+        }
+    });
+    
+    // Settings deactivate button - redirect to main deactivate modal
+    $('#settings-deactivate-btn').on('click', function() {
+        $('#settings-modal').addClass('hidden');
+        $('#deactivate-modal').removeClass('hidden');
+    });
+
+    // About modal functionality
+    $('#about-btn').on('click', function(e) {
+        e.preventDefault();
+        $('#about-modal').removeClass('hidden');
+    });
+    
+    $('#close-about, #close-about-bottom').on('click', function() {
+        $('#about-modal').addClass('hidden');
+    });
+    
+    // Close about modal when clicking outside
+    $('#about-modal').on('click', function(e) {
+        if (e.target === this) {
+            $('#about-modal').addClass('hidden');
         }
     });
 

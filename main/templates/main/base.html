@@ -91,6 +91,41 @@
         .file-item-tile .truncate-name {
             max-width: calc(100% - 48px);
         }
+        .file-item-list .truncate-name {
+            max-width: 300px;
+        }
+        .file-item-list .flex-1 {
+            min-width: 0; /* Allow flex item to shrink below content size */
+            overflow: hidden;
+        }
+        @media (max-width: 640px) {
+            .file-item-list .truncate-name {
+                max-width: 150px;
+            }
+            .file-item-tile .truncate-name {
+                max-width: calc(100% - 32px);
+            }
+        }
+        @media (max-width: 480px) {
+            .file-item-list .truncate-name {
+                max-width: 120px;
+            }
+        }
+        
+        /* Settings Modal Styling */
+        #settings-modal .bg-white {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        #settings-modal .space-y-3 > div:hover {
+            background-color: #f9fafb;
+            transition: background-color 0.2s ease;
+        }
+        
+        .storage-progress {
+            transition: width 0.3s ease-in-out;
+        }
         {% endblock %}
     </style>
 </head>

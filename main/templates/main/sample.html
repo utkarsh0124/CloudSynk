@@ -16,7 +16,7 @@
 {% block content %}
   <!-- Navigation Bar -->
   <nav class="flex justify-between px-4 py-4 bg-gray-100 shadow-sm">
-    <div class="flex items-center">
+    <div class="flex items-center ml-4">
       <!-- Logo -->
       <!-- Mobile nav toggle -->
       <button id="nav-toggle-btn" class="block sm:hidden mr-4 text-gray-600 focus:outline-none"><i class="fas fa-bars fa-lg"></i></button>
@@ -38,15 +38,15 @@
           <path d="M0 96C0 78.3 14.3 64 32 64l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 128C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32L32 448c-17.7 0-32-14.3-32-32s14.3-32 32-32l384 0c17.7 0 32 14.3 32 32z" />
         </svg>
       </div>
-      <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]" style="min-width: 80px !important; width: 100px !important; font-size: 0.95rem !important; padding: 0.25rem 0 !important; top: 60%; display: none;">
+      <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]" style="min-width: 80px !important; width: 100px !important; font-size: 0.95rem !important; padding: 0.25rem 0 !important; top: 60%; display: none; transition: all 0.3s ease-in-out;">
         <form action="{% url 'logout' %}" method="post" style="display:inline;">
           {% csrf_token %}
           <button type="submit" class="block px-6 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Logout</button>
         </form>
-        <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
+        {% comment %} <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
           {% csrf_token %}
           <button type="button" id="deactivate-btn" class="block px-3 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Deactivate</button>
-        </form>
+        </form> {% endcomment %}
       </div>
     </div>
     <!-- Modal for Deactivate Confirmation moved outside dropdown-menu -->
@@ -72,17 +72,130 @@
         </div>
       </div>
     </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden transition-all duration-300">
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full mx-4 transform transition-all duration-300">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-semibold text-gray-800">Profile Settings</h2>
+          <button id="close-settings" class="text-gray-400 hover:text-gray-600 transition-colors">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        
+        <!-- Profile Information Section -->
+        <div class="mb-6">
+          <h3 class="text-lg font-medium text-gray-700 mb-4">Account Information</h3>
+          <div class="space-y-3">
+            <div class="flex justify-between py-2 border-b border-gray-100 rounded px-2">
+              <span class="text-gray-600">Username:</span>
+              <span class="font-medium text-gray-800">{{ user.username }}</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-gray-100 rounded px-2">
+              <span class="text-gray-600">Email:</span>
+              <span class="font-medium text-gray-800">{{ user.email|default:'Not provided' }}</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-gray-100 rounded px-2">
+              <span class="text-gray-600">Subscription:</span>
+              <span class="font-medium text-blue-600">{{ user.userinfo.subscription_type|default:'Free' }}</span>
+            </div>
+            <div class="flex justify-between py-2 border-b border-gray-100 rounded px-2">
+              <span class="text-gray-600">Storage Used:</span>
+              <span class="font-medium text-gray-800">{{ user.userinfo.storage_used_bytes|filesizeformat|default:'0 bytes' }} / {{ user.userinfo.storage_quota_bytes|filesizeformat|default:'5 GB' }}</span>
+            </div>
+            <div class="flex justify-between py-2 rounded px-2">
+              <span class="text-gray-600">Member Since:</span>
+              <span class="font-medium text-gray-800">{{ user.date_joined|date:'F Y' }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Storage Usage Progress Bar -->
+        {% if user.userinfo.storage_quota_bytes %}
+        <div class="mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-gray-600">Storage Usage</span>
+            <span class="text-sm text-gray-500">{{ user.userinfo.storage_used_bytes|filesizeformat }} of {{ user.userinfo.storage_quota_bytes|filesizeformat }}</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2">
+            {% widthratio user.userinfo.storage_used_bytes user.userinfo.storage_quota_bytes 100 as usage_percent %}
+            <div class="bg-blue-500 h-2 rounded-full storage-progress" style="width: {{ usage_percent|default:0 }}%"></div>
+          </div>
+        </div>
+        {% endif %}
+        
+        <!-- Action Buttons -->
+        <div class="flex justify-between space-x-3">
+          <button id="settings-deactivate-btn" class="px-4 py-2 rounded bg-red-100 hover:bg-red-200 text-red-700 transition-colors">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            Deactivate Account
+          </button>
+          <div class="space-x-3">
+            <button id="close-settings-bottom" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- About Modal -->
+    <div id="about-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden transition-all duration-300">
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4 transform transition-all duration-300">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-semibold text-gray-800">About CloudSynk</h2>
+          <button id="close-about" class="text-gray-400 hover:text-gray-600 transition-colors">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        
+        <!-- About Content -->
+        <div class="mb-6">
+          <div class="flex items-center justify-center mb-4">
+            <div class="flex items-center">
+              <span class="brand-text navbar-brand">Cloud</span>
+              <span class="brand-text navbar-brand-accent ml-1">Synk</span>
+            </div>
+          </div>
+          
+          <p class="text-gray-700 text-center mb-6 leading-relaxed">
+            CloudSynk lets you easily store, access, and manage your files online, keeping them secure and available anytime, anywhere across devices.
+          </p>
+          
+          <div class="bg-gray-50 rounded-lg p-4 mb-4">
+            <h3 class="text-lg font-medium text-gray-800 mb-2 flex items-center">
+              <i class="fab fa-github text-gray-600 mr-2"></i>
+              Open Source Project
+            </h3>
+            <p class="text-gray-600 text-sm mb-3">
+              CloudSynk is an open source project. View the code, contribute, or report issues on GitHub.
+            </p>
+            <a href="https://github.com/utkarsh0124/CloudSynk" target="_blank" 
+               class="inline-flex items-center px-3 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm rounded-md transition-colors">
+              <i class="fab fa-github mr-2"></i>
+              View on GitHub
+              <i class="fas fa-external-link-alt ml-2 text-xs"></i>
+            </a>
+          </div>
+        </div>
+        
+        <!-- Close Button -->
+        <div class="flex justify-end">
+          <button id="close-about-bottom" class="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   </nav>
 
   <div class="flex" style="height: calc(100vh - 80px);">
     <!-- Left Side Panel Navigation -->
-    <div id="side-nav" class="fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg border-r border-gray-200 transform -translate-x-full transition-transform sm:static sm:translate-x-0 sm:flex">
+    <div id="side-nav" class="fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg border-r border-gray-200 transform -translate-x-full transition-transform duration-500 ease-in-out sm:static sm:translate-x-0 sm:flex">
       <!-- App logo inside side-nav (mobile only) -->
-      <div class="flex items-center px-2 py-4 block sm:hidden">
+      <div class="flex items-center px-10 py-4 block sm:hidden">
         <span class="brand-text navbar-brand">Cloud</span>
         <span class="brand-text navbar-brand-accent ml-1">Synk</span>
       </div>
-      <div class="flex flex-col sm:py-6 px-4 sm:px-2 space-y-2">
+      <div class="flex flex-col sm:py-6 px-4 sm:px-2 space-y-1">
         <!-- Profile Card -->
         <div class="w-56 bg-gray-50 rounded-2xl shadow p-2 mb-4 flex flex-col justify-center" style="height: 160px;">
           <div class="flex items-center ml-1 mr-1" style="margin-bottom: 8px; margin-top: -8px;">
@@ -105,13 +218,13 @@
           <i class="fas fa-download text-xl ml-4"></i>
           <span>Downloads</span>
         </button>
-        <button class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+        <button id="settings-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
           <i class="fas fa-cog text-xl ml-4"></i>
           <span>Settings</span>
         </button>
-        <button class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
-          <i class="fas fa-question-circle text-xl ml-4"></i>
-          <span>Help</span>
+        <button id="about-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
+          <i class="fas fa-info-circle text-xl ml-4"></i>
+          <span>About</span>
         </button>
       </div>
     </div>
