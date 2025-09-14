@@ -547,7 +547,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update layout
             $('#file-list-container')
                 .removeClass('flex flex-col')
-                .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
+                .addClass('grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4');
             $('.file-item-tile').show();
             $('.file-item-list').hide();
         } else {
@@ -558,7 +558,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Update layout
             $('#file-list-container')
-                .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
+                .removeClass('grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4')
                 .addClass('flex flex-col');
             $('.file-item-tile').hide();
             $('.file-item-list').show();

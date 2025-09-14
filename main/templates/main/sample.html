@@ -137,28 +137,28 @@
       <div id="file-list-container" class="">
         {% for file in blobs %}
           <!-- Tile View -->
-          <div class="bg-white rounded-xl shadow p-4 flex flex-col file-item-tile" style="display: none;">
+          <div class="bg-white rounded-lg shadow p-3 sm:p-4 flex flex-col file-item-tile" style="display: none;">
             <div class="flex items-center mb-2">
-              <i class="file-icon text-blue-500 text-2xl mr-3" data-filename="{{ file.blob_name }}"></i>
-              <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name|slice:':-4' }}</span>
+              <i class="file-icon text-blue-500 text-xl sm:text-2xl mr-2 sm:mr-3 flex-shrink-0" data-filename="{{ file.blob_name }}"></i>
+              <span class="font-medium text-gray-800 truncate-name text-sm sm:text-base" title="{{ file.blob_name }}">{{ file.blob_name|slice:':-4' }}</span>
             </div>
-            <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
-            <div class="text-xs text-gray-400">Uploaded: {{ file.blob_uploaded_at_formatted|default:'Unknown date' }}</div>
-            <div class="flex items-center mt-2 space-x-3">
-              <button class="file-download-btn text-blue-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0" 
+            <div class="text-xs text-gray-500 mb-1">{{ file.blob_size|filesizeformat }}</div>
+            <div class="text-xs text-gray-400 mb-2 sm:mb-0">{{ file.blob_uploaded_at_formatted|default:'Unknown date' }}</div>
+            <div class="flex items-center mt-2 space-x-2 sm:space-x-3">
+              <button class="file-download-btn text-blue-600 hover:underline p-2 sm:p-0 flex items-center bg-transparent border-0 rounded-md sm:rounded-none hover:bg-blue-50 sm:hover:bg-transparent transition-colors" 
                       type="button" 
                       data-blob-id="{{ file.blob_id }}"
                       data-blob-name="{{ file.blob_name }}"
                       data-blob-size="{{ file.blob_size }}"
                       >
-                <i class="fas fa-download mr-1"></i>
-                <span>Download</span>
+                <i class="fas fa-download text-lg sm:text-sm mr-0 sm:mr-1"></i>
+                <span class="hidden sm:inline text-xs sm:text-sm ml-1 sm:ml-0">Download</span>
               </button>
-              <button class="file-delete-btn text-red-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0" 
+              <button class="file-delete-btn text-red-600 hover:underline p-2 sm:p-0 flex items-center bg-transparent border-0 rounded-md sm:rounded-none hover:bg-red-50 sm:hover:bg-transparent transition-colors" 
                       type="button" 
                       data-blob-id="{{ file.blob_id }}">
-                <i class="fas fa-trash-alt mr-1"></i>
-                <span>Delete</span>
+                <i class="fas fa-trash-alt text-lg sm:text-sm mr-0 sm:mr-1"></i>
+                <span class="hidden sm:inline text-xs sm:text-sm ml-1 sm:ml-0">Delete</span>
               </button>
             </div>
           </div>
