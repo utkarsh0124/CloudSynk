@@ -48,48 +48,89 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Delete file functionality using event delegation
+    // Delete file functionality using modal confirmation
+    let currentDeleteBtn = null;
+    let currentBlobId = null;
+    
     $(document).on('click', '.file-delete-btn', function(e) {
         e.preventDefault();
-        const deleteBtn = $(this);
-        const blobId = deleteBtn.data('blob-id');
+        currentDeleteBtn = $(this);
+        currentBlobId = currentDeleteBtn.data('blob-id');
         
-        if (!blobId) {
+        if (!currentBlobId) {
             alert('File ID not found');
             return;
         }
         
-        const confirmed = confirm("Are you sure you want to delete this file?");
-        if (confirmed) {
-            const csrftoken = getCsrfToken();
-            
-            // Show loading state
-            const originalText = deleteBtn.html();
-            deleteBtn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Deleting...');
-            deleteBtn.prop('disabled', true);
-            
-            fetch(`/deleteFile/${blobId}/`, {
-                method: 'POST',
-                headers: csrftoken ? { 'X-CSRFToken': csrftoken } : {},
-                credentials: 'same-origin'
-            })
-            .then(res => {
-                if (res.ok) { 
-                    window.location = '/'; 
-                    return; 
-                }
-                alert('Delete failed');
-            })
-            .catch(err => { 
-                console.error('Delete error', err); 
-                alert('Delete error'); 
-            })
-            .finally(() => {
-                // Reset button state
-                deleteBtn.html(originalText);
-                deleteBtn.prop('disabled', false);
-            });
+        // Get filename for display in modal (try different data attributes)
+        const fileName = currentDeleteBtn.data('blob-name') || 
+                        currentDeleteBtn.closest('.file-item-tile, .file-item-list').find('.truncate-name').attr('title') ||
+                        currentDeleteBtn.closest('.file-item-tile, .file-item-list').find('.truncate-name').text() ||
+                        'this file';
+        
+        // Set filename in modal and show it
+        $('#delete-filename').text(fileName);
+        $('#delete-modal').removeClass('hidden');
+    });
+    
+    // Delete modal event handlers
+    $('#cancel-delete').on('click', function() {
+        $('#delete-modal').addClass('hidden');
+        currentDeleteBtn = null;
+        currentBlobId = null;
+    });
+    
+    $('#confirm-delete').on('click', function() {
+        if (!currentDeleteBtn || !currentBlobId) {
+            $('#delete-modal').addClass('hidden');
+            return;
         }
+        
+        const csrftoken = getCsrfToken();
+        
+        // Show loading state on confirm button
+        $(this).html('<i class="fas fa-spinner fa-spin mr-1"></i>Deleting...');
+        $(this).prop('disabled', true);
+        
+        // For icon-only buttons, add status text like download functionality
+        let statusContainer = currentDeleteBtn.siblings('.delete-status');
+        if (statusContainer.length === 0) {
+            statusContainer = $('<span class="delete-status text-xs ml-2 text-red-600"></span>');
+            currentDeleteBtn.after(statusContainer);
+        }
+        statusContainer.text('Deleting...');
+        currentDeleteBtn.prop('disabled', true).addClass('opacity-50');
+        
+        fetch(`/deleteFile/${currentBlobId}/`, {
+            method: 'POST',
+            headers: csrftoken ? { 'X-CSRFToken': csrftoken } : {},
+            credentials: 'same-origin'
+        })
+        .then(res => {
+            if (res.ok) { 
+                statusContainer.text('Deleted!').removeClass('text-red-600').addClass('text-green-600');
+                setTimeout(() => {
+                    window.location = '/'; 
+                }, 1000);
+                return; 
+            }
+            throw new Error('Delete failed');
+        })
+        .catch(err => { 
+            console.error('Delete error', err); 
+            statusContainer.text('Delete failed').removeClass('text-green-600').addClass('text-red-600');
+            setTimeout(() => {
+                statusContainer.remove();
+                currentDeleteBtn.prop('disabled', false).removeClass('opacity-50');
+            }, 2000);
+        })
+        .finally(() => {
+            // Hide modal and reset confirm button
+            $('#delete-modal').addClass('hidden');
+            $('#confirm-delete').html('Yes, Delete').prop('disabled', false);
+            currentDeleteBtn = null;
+            currentBlobId = null;
+        });
     });
 
     // Enhanced download file functionality with resume capability
@@ -99,8 +140,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const blobId = downloadBtn.data('blob-id');
         const blobName = downloadBtn.data('blob-name');
         const blobSize = downloadBtn.data('blob-size');
-        // print all information
-        console.log('Blob ID:', blobId, 'Blob Name:', blobName, 'Blob Size:', blobSize);
         
         if (!blobId) {
             alert('File ID not found');
@@ -115,22 +154,28 @@ document.addEventListener('DOMContentLoaded', function() {
         let resumeData = getResumeData(downloadId);
         
         try {
-            const originalText = downloadBtn.html();
-            downloadBtn.html('<i class="fas fa-spinner fa-spin mr-1"></i>Preparing download...');
-            downloadBtn.prop('disabled', true);
+            // Add status text container next to button if it doesn't exist
+            let statusContainer = downloadBtn.siblings('.download-status');
+            if (statusContainer.length === 0) {
+                statusContainer = $('<span class="download-status text-xs ml-2"></span>');
+                downloadBtn.after(statusContainer);
+            }
+            
+            statusContainer.text('Preparing download...').removeClass('text-green-600 text-red-600').addClass('text-blue-600');
+            downloadBtn.prop('disabled', true).addClass('opacity-50');
             
             let downloadedBytes = resumeData ? resumeData.downloadedBytes : 0;
             let chunks = resumeData ? resumeData.chunks : [];
             
             // If already completed
             if (downloadedBytes >= blobSize && chunks.length > 0) {
-                downloadCompleted(chunks, fileName, downloadBtn, originalText);
+                downloadCompleted(chunks, fileName, downloadBtn, statusContainer);
                 return;
             }
             
             // For small files, use simple form submission
             if (blobSize < 5 * 1024 * 1024) { // Less than 5MB
-                simpleDownload(blobId, downloadBtn, originalText);
+                simpleDownload(blobId, downloadBtn, statusContainer);
                 return;
             }
             
@@ -153,32 +198,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Update progress
                     const progress = Math.round((downloadedBytes / blobSize) * 100);
-                    downloadBtn.html(`<i class="fas fa-download mr-1"></i>Downloading... ${progress}%`);
+                    statusContainer.text(`Downloading... ${progress}%`);
                     
                 } catch (error) {
                     console.error(`Failed to download chunk ${i}:`, error);
                     // Save current progress and show resume option
                     saveResumeData(downloadId, { downloadedBytes, chunks: chunks.slice() });
-                    showResumeOption(blobId, fileName, downloadBtn, originalText);
+                    showResumeOption(blobId, fileName, downloadBtn, statusContainer);
                     return;
                 }
             }
             
             // Download completed
-            downloadCompleted(chunks, fileName, downloadBtn, originalText);
+            downloadCompleted(chunks, fileName, downloadBtn, statusContainer);
             clearResumeData(downloadId);
             
         } catch (error) {
             console.error('Download failed:', error);
-            downloadBtn.html('<i class="fas fa-exclamation-triangle mr-1"></i>Download failed');
+            let statusContainer = downloadBtn.siblings('.download-status');
+            if (statusContainer.length === 0) {
+                statusContainer = $('<span class="download-status text-xs ml-2"></span>');
+                downloadBtn.after(statusContainer);
+            }
+            statusContainer.text('Download failed').removeClass('text-blue-600 text-green-600').addClass('text-red-600');
             setTimeout(() => {
-                downloadBtn.html(originalText);
-                downloadBtn.prop('disabled', false);
+                statusContainer.remove();
+                downloadBtn.prop('disabled', false).removeClass('opacity-50');
             }, 2000);
         }
     }
 
-    function simpleDownload(blobId, downloadBtn, originalText) {
+    function simpleDownload(blobId, downloadBtn, statusContainer) {
         const csrftoken = getCsrfToken();
         
         // Create a form and submit it to trigger file download
@@ -199,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.appendChild(form);
         
         // Show downloading state
-        downloadBtn.html('<i class="fas fa-download mr-1"></i>Downloading...');
+        statusContainer.text('Downloading...').removeClass('text-green-600 text-red-600').addClass('text-blue-600');
         
         // Submit the form to trigger download
         form.submit();
@@ -209,10 +259,10 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Show success state briefly, then reset
         setTimeout(() => {
-            downloadBtn.html('<i class="fas fa-check mr-1"></i>Downloaded');
+            statusContainer.text('Downloaded!').removeClass('text-blue-600 text-red-600').addClass('text-green-600');
             setTimeout(() => {
-                downloadBtn.html(originalText);
-                downloadBtn.prop('disabled', false);
+                statusContainer.remove();
+                downloadBtn.prop('disabled', false).removeClass('opacity-50');
             }, 1500);
         }, 500);
     }
@@ -276,35 +326,36 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function showResumeOption(blobId, fileName, downloadBtn, originalText) {
-        downloadBtn.html('<i class="fas fa-play mr-1"></i>Resume download');
-        downloadBtn.prop('disabled', false);
+    function showResumeOption(blobId, fileName, downloadBtn, statusContainer) {
+        statusContainer.text('Click to resume download').removeClass('text-blue-600 text-green-600').addClass('text-orange-600');
+        downloadBtn.prop('disabled', false).removeClass('opacity-50');
         
         // Add resume handler
         downloadBtn.off('click.resume').on('click.resume', function(e) {
             e.preventDefault();
             downloadBtn.off('click.resume');
-            downloadFileWithResume(blobId, fileName, downloadBtn);
+            const blobSize = downloadBtn.data('blob-size');
+            downloadFileWithResume(blobId, fileName, blobSize, downloadBtn);
         });
     }
 
-    function downloadCompleted(chunks, fileName, downloadBtn, originalText) {
+    function downloadCompleted(chunks, fileName, downloadBtn, statusContainer) {
         try {
             // Combine all chunks into a single blob
             const combinedBlob = new Blob(chunks.filter(chunk => chunk));
             triggerDownload(combinedBlob, fileName);
             
-            downloadBtn.html('<i class="fas fa-check mr-1"></i>Downloaded');
+            statusContainer.text('Downloaded!').removeClass('text-blue-600 text-red-600').addClass('text-green-600');
             setTimeout(() => {
-                downloadBtn.html(originalText);
-                downloadBtn.prop('disabled', false);
+                statusContainer.remove();
+                downloadBtn.prop('disabled', false).removeClass('opacity-50');
             }, 2000);
         } catch (error) {
             console.error('Failed to complete download:', error);
-            downloadBtn.html('<i class="fas fa-exclamation-triangle mr-1"></i>Download error');
+            statusContainer.text('Download error').removeClass('text-blue-600 text-green-600').addClass('text-red-600');
             setTimeout(() => {
-                downloadBtn.html(originalText);
-                downloadBtn.prop('disabled', false);
+                statusContainer.remove();
+                downloadBtn.prop('disabled', false).removeClass('opacity-50');
             }, 2000);
         }
     }
@@ -386,6 +437,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // View toggle functionality
     $('#tile-view-btn').on('click', function() {
+        // Update button states
+        $(this).removeClass('bg-gray-200 text-gray-700').addClass('bg-blue-500 text-white');
+        $('#list-view-btn').removeClass('bg-blue-500 text-white').addClass('bg-gray-200 text-gray-700');
+        
+        // Update layout
         $('#file-list-container')
             .removeClass('flex flex-col')
             .addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6');
@@ -393,14 +449,19 @@ document.addEventListener('DOMContentLoaded', function() {
         $('.file-item-list').hide();
     });
     $('#list-view-btn').on('click', function() {
+        // Update button states
+        $(this).removeClass('bg-gray-200 text-gray-700').addClass('bg-blue-500 text-white');
+        $('#tile-view-btn').removeClass('bg-blue-500 text-white').addClass('bg-gray-200 text-gray-700');
+        
+        // Update layout
         $('#file-list-container')
             .removeClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6')
             .addClass('flex flex-col');
         $('.file-item-tile').hide();
         $('.file-item-list').show();
     });
-    // Initial state: tile view only
-    $('.file-item-list').hide();
+    // Initial state: list view only (button already styled as selected in HTML)
+    $('.file-item-tile').hide();
 
     // Storage progress bar calculation
     (function() {

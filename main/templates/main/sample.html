@@ -41,11 +41,11 @@
       <div id="dropdown-menu" class="dropdown-menu bg-white shadow rounded py-2 right-0 mt-2 absolute min-w-[100px]" style="min-width: 80px !important; width: 100px !important; font-size: 0.95rem !important; padding: 0.25rem 0 !important; top: 60%; display: none;">
         <form action="{% url 'logout' %}" method="post" style="display:inline;">
           {% csrf_token %}
-          <button type="submit" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Logout</button>
+          <button type="submit" class="block px-6 py-2 text-gray-700 hover:bg-gray-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Logout</button>
         </form>
         <form action="{% url 'deactivate' %}" method="post" style="display:inline; margin-top: 2px;">
           {% csrf_token %}
-          <button type="button" id="deactivate-btn" class="block px-4 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Deactivate</button>
+          <button type="button" id="deactivate-btn" class="block px-3 py-2 text-red-600 hover:bg-red-100 bg-transparent border-0" style="padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; font-size: 0.95rem !important;">Deactivate</button>
         </form>
       </div>
     </div>
@@ -57,6 +57,18 @@
         <div class="flex justify-end space-x-3">
           <button id="cancel-deactivate" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
           <button id="confirm-deactivate" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Deactivate</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Modal for Delete File Confirmation -->
+    <div id="delete-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
+        <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm Delete</h2>
+        <p class="mb-4 text-gray-700">Are you sure you want to delete "<span id="delete-filename" class="font-medium"></span>"? This action cannot be undone.</p>
+        <div class="flex justify-end space-x-3">
+          <button id="cancel-delete" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+          <button id="confirm-delete" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Delete</button>
         </div>
       </div>
     </div>
@@ -109,29 +121,29 @@
       <div class="flex justify-start mb-6 items-center space-x-4">
         <form id="upload-form" enctype="multipart/form-data" class="relative">
           {% csrf_token %}
-          <label for="file-upload" class="cursor-pointer flex items-center justify-center bg-blue-500 text-white px-4 py-2 rounded shadow hover:bg-blue-600 transition">
-            <i class="fas fa-plus mr-2"></i>
-            <span>Add File</span>
+          <label for="file-upload" class="flex items-center w-24 space-x-1 text-gray-700 hover:text-white hover:bg-blue-500 transition mt-auto ml-1 py-2 rounded-3xl border-2 border-blue-200 border-transparent hover:border-0 hover:shadow-sm active:bg-blue-100">
+            <span class="ml-5">Upload</span>
             <input id="file-upload" name="blob_file" type="file" class="hidden" />
           </label>
         </form>
 
         <!-- View Toggle Buttons -->
         <div class="flex items-center space-x-2">
+          <button id="list-view-btn" type="button" class="bg-blue-500 text-white px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
           <button id="tile-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="Tile View"><i class="fas fa-th-large"></i></button>
-          <button id="list-view-btn" type="button" class="bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-700 px-3 py-2 rounded transition flex items-center" title="List View"><i class="fas fa-list"></i></button>
         </div>
       </div>
 
-      <div id="file-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div id="file-list-container" class="flex flex-col">
         {% for file in blobs %}
-          <div class="bg-white rounded-lg shadow p-4 flex flex-col file-item-tile">
+          <!-- Tile View -->
+          <div class="bg-white rounded-xl shadow p-4 flex flex-col file-item-tile" style="display: none;">
             <div class="flex items-center mb-2">
               <i class="fas fa-file-alt text-blue-500 text-2xl mr-3"></i>
               <span class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</span>
             </div>
             <div class="text-xs text-gray-500 mb-1">Size: {{ file.blob_size|filesizeformat }}</div>
-            <div class="text-xs text-gray-400">Uploaded: {{ file.uploaded_at_formatted|default:'Unknown date' }}</div>
+            <div class="text-xs text-gray-400">Uploaded: {{ file.blob_uploaded_at_formatted|default:'Unknown date' }}</div>
             <div class="flex items-center mt-2 space-x-3">
               <button class="file-download-btn text-blue-600 hover:underline text-sm flex items-center bg-transparent border-0 p-0" 
                       type="button" 
@@ -147,6 +159,33 @@
                       data-blob-id="{{ file.blob_id }}">
                 <i class="fas fa-trash-alt mr-1"></i>
                 <span>Delete</span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- List View -->
+          <div class="bg-white rounded-lg shadow p-3 flex items-center justify-between file-item-list mb-2">
+            <div class="flex items-center flex-1">
+              <i class="fas fa-file-alt text-blue-500 text-lg mr-3"></i>
+              <div class="flex-1">
+                <div class="font-medium text-gray-800 truncate-name" title="{{ file.blob_name }}">{{ file.blob_name }}</div>
+                <div class="text-xs text-gray-500">{{ file.blob_size|filesizeformat }} • {{ file.blob_uploaded_at_formatted|default:'Unknown date' }}</div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button class="file-download-btn bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-2 rounded-md text-sm flex items-center justify-center transition-colors border-0" 
+                      type="button" 
+                      data-blob-id="{{ file.blob_id }}"
+                      data-blob-name="{{ file.blob_name }}"
+                      data-blob-size="{{ file.blob_size }}"
+                      title="Download {{ file.blob_name }}">
+                <i class="fas fa-download"></i>
+              </button>
+              <button class="file-delete-btn bg-red-100 hover:bg-red-200 text-red-700 px-2 py-2 rounded-md text-sm flex items-center justify-center transition-colors border-0" 
+                      type="button" 
+                      data-blob-id="{{ file.blob_id }}"
+                      title="Delete {{ file.blob_name }}">
+                <i class="fas fa-trash-alt"></i>
               </button>
             </div>
           </div>
