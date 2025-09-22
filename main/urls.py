@@ -11,7 +11,6 @@ urlpatterns = [
     path("logout/", views.LogoutAPIView.as_view(), name="logout"),
     path("deactivate/", views.DeactivateUserAPIView.as_view(), name="deactivate"),
     path("deleteFile/<str:blob_id>/", views.DeleteBlobAPIView.as_view(), name="delete"),
-    # path("addFile/", views.AddBlobAPIView.as_view(), name="add"),
     path("downloadFile/<str:blob_id>/", views.DownloadBlobAPIView.as_view(), name="download"),
     path("chunkedUpload/", views.ChunkedUploadAPIView.as_view(), name="chunked_upload"),
 ]

@@ -226,48 +226,6 @@ class DeactivateUserAPIView(APIView):
         return redirect('/?error=api_instantiation_failed')
 
 @method_decorator(csrf_exempt, name='dispatch')
-class AddBlobAPIView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        user = request.user
-        try:
-            user_info = UserInfo.objects.get(user=user)
-        except UserInfo.DoesNotExist:
-            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # file_name may come in form-data or JSON
-        blob_file = request.data.get('blob_file') or request.query_params.get('blob_file')
-        if not blob_file:
-            return Response({'success': False, 'error': 'Missing blob file'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        file_name = request.data.get('file_name') or request.query_params.get('file_name')
-        if not file_name:
-            return Response({'success': False, 'error': 'Missing file name'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # get file size in bytes
-        file_size_bytes = blob_file.size
-        if file_size_bytes <= 0:
-            # handle error
-            return Response({'success': False, 'error': 'Uploaded file is empty'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        api_instance = az_api.get_container_instance(user_info.user_name)
-        if api_instance:
-            blob_validation = api_instance.validate_new_blob_addition(file_size_bytes, file_name)
-            if not blob_validation[0]:
-                return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
-
-            result, blob_id = api_instance.blob_create(file_name, file_size_bytes, "file", blob_file)
-            # add a debug log with format
-            if result == False:
-                return Response({'success': False, 'error': 'Blob creation failed'}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Always return JSON response
-            return Response({'success': True, 'blob_id': blob_id}, status=status.HTTP_201_CREATED)
-        # If api_instance is None
-        return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-@method_decorator(csrf_exempt, name='dispatch')
 class DeleteBlobAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
