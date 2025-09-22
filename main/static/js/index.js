@@ -130,10 +130,50 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(async res => {
             if (res.ok) { window.location = '/'; return; }
             const data = await res.json().catch(()=>null);
-            alert(data?.error || 'Upload failed');
+            
+            // Check if it's a quota-related error
+            if (data?.error && isQuotaError(data.error)) {
+                showQuotaExceededModal(file, data.error);
+            } else {
+                alert(data?.error || 'Upload failed');
+            }
         })
         .catch(err => { console.error('Upload error', err); alert('Upload error'); })
         .finally(() => { if (fileInput) fileInput.disabled = false; });
+    }
+
+    // Function to check if error is quota-related
+    function isQuotaError(errorMessage) {
+        const quotaKeywords = [
+            'storage quota exceeded',
+            'quota exceeded',
+            'not enough storage',
+            'storage limit',
+            'storage space',
+            'upgrade your subscription'
+        ];
+        return quotaKeywords.some(keyword => 
+            errorMessage.toLowerCase().includes(keyword)
+        );
+    }
+
+    // Function to show quota exceeded modal
+    function showQuotaExceededModal(file, errorMessage) {
+        // Update modal content
+        $('#quota-error-message').text(errorMessage);
+        $('#quota-file-size').text(formatFileSize(file.size));
+        
+        // Show the modal
+        $('#quota-exceeded-modal').removeClass('hidden');
+    }
+
+    // Helper function to format file size
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     if (fileInput) {
@@ -147,9 +187,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(`📤 Added to transfer manager: ${f.name} (ID: ${transferId})`);
                 
                 // Track upload activity
-                if (window.historyManager) {
+                /* if (window.historyManager) {
                     window.historyManager.trackUpload(f.name, f.size, transferId);
-                }
+                } */
                 
                 // Reset the file input
                 fileInput.value = '';
@@ -282,9 +322,9 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log(`📥 Added to transfer manager: ${blobName} (ID: ${transferId})`);
             
             // Track download activity
-            if (window.historyManager) {
+            /* if (window.historyManager) {
                 window.historyManager.trackDownload(blobName, blobSize, transferId, blobId);
-            }
+            } */
             
             // Show brief feedback
             const originalText = downloadBtn.find('span').text();
@@ -715,53 +755,44 @@ document.addEventListener('DOMContentLoaded', function() {
         $('#dropdown-menu').on('click', function(e) {
             e.stopPropagation();
         });
-    });    // Deactivate modal functionality
-    $('#deactivate-btn').on('click', function(e) {
-        e.preventDefault();
-        $('#deactivate-modal').removeClass('hidden');
     });
+    
+    // Deactivate modal functionality (triggered from settings modal)
     $('#cancel-deactivate').on('click', function() {
         $('#deactivate-modal').addClass('hidden');
     });
     $('#confirm-deactivate').on('click', function() {
-        // Find the deactivate form and submit it
-        const form = $('form[action$="deactivate/"]');
-        if (form.length > 0) {
-            const csrftoken = getCsrfToken();
-            
-            // Show loading state
-            $(this).html('<i class="fas fa-spinner fa-spin mr-1"></i>Deactivating...');
-            $(this).prop('disabled', true);
-            
-            // Submit via AJAX to handle the response properly
-            fetch(form.attr('action'), {
-                method: 'POST',
-                headers: csrftoken ? { 'X-CSRFToken': csrftoken } : {},
-                credentials: 'same-origin'
-            })
-            .then(async res => {
-                if (res.ok) {
-                    // Successful deactivation - redirect to login
-                    window.location = '/login/';
-                    return;
-                }
-                const data = await res.json().catch(() => null);
-                alert(data?.error || 'Deactivation failed');
-            })
-            .catch(err => {
-                console.error('Deactivation error', err);
-                alert('Deactivation error');
-            })
-            .finally(() => {
-                // Hide modal and reset button
-                $('#deactivate-modal').addClass('hidden');
-                $(this).html('Yes, Deactivate');
-                $(this).prop('disabled', false);
-            });
-        } else {
-            console.error('Deactivate form not found');
-            alert('Error: Deactivate form not found');
-        }
+        const csrftoken = getCsrfToken();
+        
+        // Show loading state
+        $(this).html('<i class="fas fa-spinner fa-spin mr-1"></i>Deactivating...');
+        $(this).prop('disabled', true);
+        
+        // Submit via AJAX to handle the response properly
+        fetch('/deactivate/', {
+            method: 'POST',
+            headers: csrftoken ? { 'X-CSRFToken': csrftoken } : {},
+            credentials: 'same-origin'
+        })
+        .then(async res => {
+            if (res.ok) {
+                // Successful deactivation - redirect to login
+                window.location = '/login/';
+                return;
+            }
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Deactivation failed');
+        })
+        .catch(err => {
+            console.error('Deactivation error', err);
+            alert('Deactivation error');
+        })
+        .finally(() => {
+            // Hide modal and reset button
+            $('#deactivate-modal').addClass('hidden');
+            $(this).html('Yes, Deactivate');
+            $(this).prop('disabled', false);
+        });
     });
 
     // Transfer Manager modal functionality
@@ -775,7 +806,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // History modal functionality
+    // History modal functionality (commented out)
+    /*
     $('#history-btn').on('click', function(e) {
         e.preventDefault();
         if (window.historyManager) {
@@ -785,6 +817,7 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('History manager not loaded. Please refresh the page.');
         }
     });
+    */
 
     // Settings modal functionality
     $('#settings-btn').on('click', function(e) {
@@ -794,13 +827,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     $('#close-settings, #close-settings-bottom').on('click', function() {
         $('#settings-modal').addClass('hidden');
-    });
-    
-    // Close settings modal when clicking outside
-    $('#settings-modal').on('click', function(e) {
-        if (e.target === this) {
-            $('#settings-modal').addClass('hidden');
-        }
     });
     
     // Settings deactivate button - redirect to main deactivate modal
@@ -817,13 +843,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     $('#close-about, #close-about-bottom').on('click', function() {
         $('#about-modal').addClass('hidden');
-    });
-    
-    // Close about modal when clicking outside
-    $('#about-modal').on('click', function(e) {
-        if (e.target === this) {
-            $('#about-modal').addClass('hidden');
-        }
     });
 
     // View toggle functionality with localStorage persistence
@@ -892,6 +911,25 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#storage-bar').attr('aria-valuenow', Math.round(percentClamped));
         }
     })();
+
+    // Quota exceeded modal functionality
+    $('#quota-modal-close').on('click', function() {
+        $('#quota-exceeded-modal').addClass('hidden');
+    });
+    
+    $('#quota-manage-files').on('click', function() {
+        $('#quota-exceeded-modal').addClass('hidden');
+        // Scroll to file list area
+        $('html, body').animate({
+            scrollTop: $('#file-list-container').offset().top - 100
+        }, 500);
+    });
+    
+    $('#upgrade-subscription-link').on('click', function() {
+        $('#quota-exceeded-modal').addClass('hidden');
+        // Open settings modal to show subscription info
+        $('#settings-modal').removeClass('hidden');
+    });
 
     // Mobile nav toggle
     // Mobile nav toggle button handler

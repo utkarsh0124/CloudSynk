@@ -326,8 +326,6 @@ class HomeAPIView(APIView):
             except Exception:
                 blob_obj['blob_uploaded_at_formatted'] = None
 
-        # Always return JSON for SPA behavior - let frontend handle rendering
-        # But also support direct browser access by rendering template if not API request
         if _is_api_request(request):
             return Response({
                 'success': True, 
@@ -464,6 +462,13 @@ class ChunkedUploadAPIView(APIView):
         api_instance = az_api.get_container_instance(user_info.user_name)
         if not api_instance:
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Validate quota for the first chunk only (to avoid multiple validations for the same file)
+        if chunk_index == 0:
+            # Validate against user's quota and file name uniqueness
+            blob_validation = api_instance.validate_new_blob_addition(total_size, file_name)
+            if not blob_validation[0]:
+                return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             # Store chunk

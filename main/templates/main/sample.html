@@ -73,6 +73,46 @@
       </div>
     </div>
 
+    <!-- Storage Quota Exceeded Modal -->
+    <div id="quota-exceeded-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+        <h2 class="text-lg font-semibold mb-4 text-orange-600 flex items-center">
+          <i class="fas fa-exclamation-triangle mr-2"></i>
+          Storage Quota Exceeded
+        </h2>
+        <div class="mb-4">
+          <p class="text-gray-700 mb-3" id="quota-error-message">
+            You don't have enough storage space to upload this file.
+          </p>
+          <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-3">
+            <div class="flex justify-between text-sm">
+              <span class="text-gray-600">Current Usage:</span>
+              <span class="font-medium text-gray-800" id="quota-current-usage">{{ user.userinfo.storage_used_bytes|filesizeformat }}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-gray-600">Storage Limit:</span>
+              <span class="font-medium text-gray-800" id="quota-storage-limit">{{ user.userinfo.storage_quota_bytes|filesizeformat }}</span>
+            </div>
+            <div class="flex justify-between text-sm mt-2 pt-2 border-t border-orange-200">
+              <span class="text-gray-600">File Size:</span>
+              <span class="font-medium text-orange-600" id="quota-file-size">-</span>
+            </div>
+          </div>
+          {% comment %} <p class="text-sm text-gray-600">
+            To upload this file, please delete some existing files or 
+            <span class="text-blue-600 font-medium cursor-pointer hover:underline" id="upgrade-subscription-link">upgrade your subscription</span>.
+          </p> {% endcomment %}
+        </div>
+        <div class="flex justify-end space-x-3">
+          {% comment %} <button id="quota-manage-files" class="px-4 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors">
+            <i class="fas fa-folder-open mr-1"></i>
+            Manage Files
+          </button> {% endcomment %}
+          <button id="quota-modal-close" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settings-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden transition-all duration-300">
       <div class="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full mx-4 transform transition-all duration-300">
@@ -131,7 +171,7 @@
             Deactivate Account
           </button>
           <div class="space-x-3">
-            <button id="close-settings-bottom" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">Close</button>
+            <button id="close-settings-bottom" class="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white transition-colors">Close</button>
           </div>
         </div>
       </div>
@@ -218,10 +258,12 @@
           <i class="fas fa-exchange-alt text-xl ml-4"></i>
           <span>Transfers</span>
         </button>
+        {% comment %}
         <button id="history-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
           <i class="fas fa-history text-xl ml-4"></i>
           <span>History</span>
         </button>
+        {% endcomment %}
         <button id="settings-btn" class="flex items-center space-x-1 text-gray-700 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-200 transition mt-auto ml-1 py-2 rounded-2xl border border-transparent hover:shadow-sm active:bg-blue-100 active:border-blue-300">
           <i class="fas fa-cog text-xl ml-4"></i>
           <span>Settings</span>
@@ -316,7 +358,9 @@
 {% endblock %}
 
 {% block extra_js %}
+  {% comment %}
   <script src="{% static 'js/historyManager.js' %}"></script>
+  {% endcomment %}
   <script src="{% static 'js/transferManager.js' %}"></script>
   <script src="{% static 'js/index.js' %}"></script>
 {% endblock %}

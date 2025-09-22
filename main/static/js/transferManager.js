@@ -9,8 +9,8 @@ class TransferManager {
         this.uploads = new Map();
         this.downloads = new Map();
         this.activeTransfers = new Map();
-        this.maxConcurrentTransfers = 2;
-        this.chunkSize = 2 * 1024 * 1024; // 2MB chunks
+        this.maxConcurrentTransfers = 1;
+        this.chunkSize = 1 * 1024 * 1024; // 1MB chunks
         this.currentView = 'all'; // all, uploads, downloads
         
         this.init();
@@ -143,6 +143,11 @@ class TransferManager {
             } else {
                 transfer.status = 'error';
                 transfer.error = error.message;
+                
+                // Check if it's a quota error and show appropriate modal
+                if (this.isQuotaError(error.message) && transfer.type === 'upload') {
+                    this.showQuotaExceededModal(transfer);
+                }
             }
             this.updateUI();
             this.processQueue(); // Continue with next transfer
@@ -275,12 +280,14 @@ class TransferManager {
     async startUpload(transfer) {
         const { file, fileName, fileSize } = transfer;
 
-        // Determine if we need chunked upload
-        if (fileSize >= 5 * 1024 * 1024) { // 5MB threshold
-            await this.uploadLargeFile(transfer);
-        } else {
-            await this.uploadSmallFile(transfer);
-        }
+        // // Determine if we need chunked upload
+        // if (fileSize >= 5 * 1024 * 1024) { // 5MB threshold
+        //     await this.uploadLargeFile(transfer);
+        // } else {
+        //     await this.uploadSmallFile(transfer);
+        // }
+            // Determine if we need chunked upload
+        await this.uploadLargeFile(transfer);
     }
 
     /**
@@ -581,7 +588,8 @@ class TransferManager {
      * Move transfer to completed (track in history and remove from active)
      */
     moveToCompleted(transfer) {
-        // Track completed transfer in history manager
+        // Track completed transfer in history manager (commented out)
+        /*
         if (window.historyManager) {
             if (transfer.type === 'download') {
                 window.historyManager.trackDownload(transfer.fileName, transfer.fileSize, transfer.id, transfer.blobId);
@@ -589,6 +597,7 @@ class TransferManager {
                 window.historyManager.trackUpload(transfer.fileName, transfer.fileSize, transfer.id);
             }
         }
+        */
         
         // Remove from active transfers
         this.activeTransfers.delete(transfer.id);
@@ -1141,6 +1150,49 @@ class TransferManager {
         setTimeout(() => {
             notification.fadeOut();
         }, 15000);
+    }
+
+    /**
+     * Check if error message indicates a quota issue
+     */
+    isQuotaError(errorMessage) {
+        const quotaKeywords = [
+            'storage quota exceeded',
+            'quota exceeded',
+            'not enough storage',
+            'storage limit',
+            'storage space',
+            'upgrade your subscription'
+        ];
+        return quotaKeywords.some(keyword => 
+            errorMessage.toLowerCase().includes(keyword)
+        );
+    }
+
+    /**
+     * Show quota exceeded modal for upload transfer
+     */
+    showQuotaExceededModal(transfer) {
+        // Update modal content with transfer-specific information
+        $('#quota-error-message').text(transfer.error);
+        $('#quota-file-size').text(this.formatFileSize(transfer.fileSize));
+        
+        // Show the modal
+        $('#quota-exceeded-modal').removeClass('hidden');
+        
+        // Also hide the transfer manager modal if it's open
+        this.hideModal();
+    }
+
+    /**
+     * Format file size for display
+     */
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 }
 

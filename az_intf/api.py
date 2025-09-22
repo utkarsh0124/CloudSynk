@@ -1,4 +1,5 @@
 from .api_utils.Container import Container
+from .api_utils import Auth
 from storage_webapp import logger, severity
 
 CONTAINER_INSTANCE = None

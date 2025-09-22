@@ -50,6 +50,7 @@ class Container:
         #---------------------------------------------------------------------------
         account_url = f"https://{AZURE_STORAGE_ACCOUNT_NAME}.blob.{AZURE_STORAGE_ENDPOINT_SUFFIX}"
         try:
+            logger.log(severity['INFO'], f"Calling API to create Container '{container_name}'")
             service_client = BlobServiceClient(account_url=account_url, credential=AZURE_STORAGE_ACCOUNT_KEY)
             container_client = service_client.get_container_client(container_name)
             container_client.create_container()
