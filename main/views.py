@@ -434,44 +434,44 @@ class ChunkedUploadAPIView(APIView):
             blob_validation = api_instance.validate_new_blob_addition(total_size, file_name)
             if not blob_validation[0]:
                 return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Initialize streaming upload session for first chunk
+            init_result = api_instance.initialize_streaming_upload(file_name, upload_id, total_size)
+            if not init_result['success']:
+                return Response({'success': False, 'error': init_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            # Store chunk
-            result = api_instance.store_upload_chunk(
-                upload_id=upload_id,
-                chunk_index=chunk_index,
-                chunk_data=chunk_data,
-                file_name=file_name,
-                total_chunks=total_chunks,
-                total_size=total_size
-            )
-            
-            if not result:
-                return Response({'success': False, 'error': 'Failed to store chunk'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Stream chunk directly to Azure
+            chunk_result = api_instance.append_chunk_to_blob(upload_id, chunk_data, chunk_index)
+            if not chunk_result['success']:
+                return Response({'success': False, 'error': chunk_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             # Check if upload is complete
             if chunk_index == total_chunks - 1:
-                # Finalize upload synchronously but with progress updates
-                blob_id = api_instance.finalize_chunked_upload(upload_id, file_name, total_size)
-                if blob_id:
+                # Finalize streaming upload
+                finalize_result = api_instance.finalize_streaming_upload(upload_id, file_name)
+                if finalize_result['success']:
                     return Response({
                         'success': True, 
                         'completed': True,
-                        'blob_id': blob_id,
-                        'message': 'Upload completed'
+                        'blob_id': finalize_result['blob_id'],
+                        'uploaded_size': finalize_result['uploaded_size'],
+                        'duration': finalize_result.get('duration', 0),
+                        'message': 'Upload completed successfully'
                     }, status=status.HTTP_201_CREATED)
                 else:
-                    return Response({'success': False, 'error': 'Failed to finalize upload'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    return Response({'success': False, 'error': finalize_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             return Response({
                 'success': True,
                 'completed': False,
                 'chunk_index': chunk_index,
-                'message': f'Chunk {chunk_index + 1}/{total_chunks} uploaded'
+                'uploaded_size': chunk_result.get('uploaded_size', 0),
+                'message': f'Chunk {chunk_index + 1}/{total_chunks} streamed to Azure'
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            return Response({'success': False, 'error': f'Upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'success': False, 'error': f'Streaming upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get(self, request):
         """Get upload status for resume"""
