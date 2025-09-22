@@ -1,13 +1,134 @@
-{% extends 'main/base.html' %} {% block title %}Sign Up{% endblock %} 
-{% load crispy_forms_tags %} {% block content %}
+{% extends 'main/base.html' %}
+{% load static %}
 
-<form action="/signup/" method="post" enctype="multipart/form-data">
-  {% csrf_token %}{{form|crispy}}
-  Email: <input type="email" name="email" placeholder="Enter email here..."><br>
-  Username: <input type="text" name="username" placeholder="Enter UserId here..."><br>
-  Password: <input type="password" name="password1" placeholder="Enter password here..."><br>
-  Type Passsword again: <input type="password" name="password2" placeholder="Enter password here..."><br>
-  <button type="submit" value="Submit">Submit</button>
-</form>
+{% block title %}Sign Up - CloudSynk{% endblock %}
 
+{% block extra_css %}
+<style>
+    .login-card {
+        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 25px 45px rgba(0, 0, 0, 0.1);
+    }
+    .input-field {
+        transition: all 0.3s ease;
+    }
+    .input-field:focus {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    .btn-primary {
+        background: linear-gradient(135deg, #174ea6 0%, #4285f4 100%);
+        transition: all 0.3s ease;
+    }
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 25px rgba(23, 78, 166, 0.4);
+    }
+    .error-message {
+        animation: shake 0.5s ease-in-out;
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+    }
+    .loading-spinner {
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md" id="signup-container">
+        <div class="text-center mb-8">
+            <div class="mb-4">
+                <span class="brand-text navbar-brand">Cloud</span>
+                <span class="brand-text navbar-brand-accent">Synk</span>
+            </div>
+            <p class="text-white text-lg opacity-90">Create a new account</p>
+        </div>
+
+        <div class="login-card rounded-2xl p-8">
+            <div id="alert-container" class="mb-4 hidden">
+                <div id="alert-message" class="p-4 rounded-lg text-sm font-medium"></div>
+            </div>
+
+            <form id="signup-form" method="post">
+                {% csrf_token %}
+                <div class="space-y-6">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-envelope mr-2 text-gray-400"></i>Email
+                        </label>
+                        <input type="email" id="email" name="email" required
+                            class="input-field w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter your email">
+                    </div>
+                    <div>
+                        <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-user mr-2 text-gray-400"></i>Username
+                        </label>
+                        <input type="text" id="username" name="username" required
+                            class="input-field w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Choose a username">
+                    </div>
+                    <div>
+                        <label for="password1" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-lock mr-2 text-gray-400"></i>Password
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="password1" name="password1" required
+                                class="input-field w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12"
+                                placeholder="Enter password">
+                            <button type="button" id="toggle-password1"
+                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="password2" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-lock mr-2 text-gray-400"></i>Confirm Password
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="password2" name="password2" required
+                                class="input-field w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12"
+                                placeholder="Confirm password">
+                            <button type="button" id="toggle-password2"
+                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" id="signup-btn"
+                        class="btn-primary w-full py-3 px-4 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span id="signup-text">Sign Up</span>
+                        <i id="signup-spinner" class="fas fa-spinner loading-spinner ml-2 hidden"></i>
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <p class="text-center text-sm text-gray-600">
+                    Already have an account?
+                    <a href="/login/" class="text-blue-600 hover:text-blue-800 font-medium transition">Sign in here</a>
+                </p>
+            </div>
+        </div>
+
+        <div class="text-center mt-8">
+            <p class="text-white text-sm opacity-75">© 2025 CloudSynk. Secure cloud storage for everyone.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/signup.js' %}"></script>
 {% endblock %}
