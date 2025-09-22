@@ -630,49 +630,75 @@ class TransferManager {
      */
     createModal() {
         const modalHTML = `
-            <div id="transfer-manager-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
-                <div class="flex items-center justify-center min-h-screen p-4">
-                    <div class="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] flex flex-col">
-                        <!-- Modal Header -->
-                        <div class="flex items-center justify-between p-6 border-b">
-                            <h3 class="text-lg font-medium text-gray-900">Transfer Manager</h3>
-                            <button id="close-transfer-manager" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
-                        </div>
+            <div id="transfer-manager-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden transition-all duration-300">
+                <div class="bg-white rounded-lg shadow-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] transform transition-all duration-300 flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-semibold text-gray-800">Transfer Manager</h2>
+                        <button id="close-transfer-manager" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Tab Navigation -->
+                    <div class="flex border-b border-gray-200 mb-6">
+                        <button class="transfer-tab px-4 py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-600" data-tab="uploads">
+                            <i class="fas fa-upload mr-2"></i>
+                            Uploads
+                        </button>
+                        <button class="transfer-tab px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-colors" data-tab="downloads">
+                            <i class="fas fa-download mr-2"></i>
+                            Downloads
+                        </button>
+                    </div>
 
-                        <!-- Tab Navigation -->
-                        <div class="flex border-b bg-gray-50 px-6">
-                            <button class="transfer-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:text-blue-600 hover:border-blue-300" data-tab="all">
-                                All Transfers
-                            </button>
-                            <button class="transfer-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:text-blue-600 hover:border-blue-300" data-tab="uploads">
-                                Uploads
-                            </button>
-                            <button class="transfer-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:text-blue-600 hover:border-blue-300" data-tab="downloads">
-                                Downloads
-                            </button>
-                        </div>
-
-                        <!-- Modal Content -->
-                        <div class="flex-1 overflow-y-auto p-6">
-                            <!-- Active Transfers -->
-                            <div id="active-transfers-section" class="mb-6">
-                                <h4 class="text-sm font-medium text-gray-700 mb-3 flex items-center">
-                                    <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                    <!-- Modal Content -->
+                    <div class="flex-1 overflow-y-auto">
+                        <!-- Upload Section -->
+                        <div id="uploads-section" class="transfer-section">
+                            <!-- Upload In Progress -->
+                            <div class="mb-6">
+                                <h3 class="text-lg font-medium text-gray-700 mb-4 flex items-center">
+                                    <i class="fas fa-spinner text-blue-500 mr-2"></i>
                                     In Progress
-                                </h4>
-                                <div id="active-transfers-list" class="space-y-3">
-                                    <!-- Active transfers will be populated here -->
+                                </h3>
+                                <div id="upload-active-list" class="space-y-3 min-h-[60px]">
+                                    <!-- Active upload transfers will be populated here -->
                                 </div>
                             </div>
 
-                            <!-- Queued Transfers -->
-                            <div id="queued-transfers-section" class="mb-6">
-                                <h4 class="text-sm font-medium text-gray-700 mb-3 flex items-center">
-                                    <span class="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                            <!-- Upload Queue -->
+                            <div class="mb-6">
+                                <h3 class="text-lg font-medium text-gray-700 mb-4 flex items-center">
+                                    <i class="fas fa-clock text-yellow-500 mr-2"></i>
                                     Queue
-                                </h4>
-                                <div id="queued-transfers-list" class="space-y-3">
-                                    <!-- Queued transfers will be populated here -->
+                                </h3>
+                                <div id="upload-queue-list" class="space-y-3 min-h-[60px]">
+                                    <!-- Queued upload transfers will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Download Section -->
+                        <div id="downloads-section" class="transfer-section hidden">
+                            <!-- Download In Progress -->
+                            <div class="mb-6">
+                                <h3 class="text-lg font-medium text-gray-700 mb-4 flex items-center">
+                                    <i class="fas fa-spinner text-blue-500 mr-2"></i>
+                                    In Progress
+                                </h3>
+                                <div id="download-active-list" class="space-y-3 min-h-[60px]">
+                                    <!-- Active download transfers will be populated here -->
+                                </div>
+                            </div>
+
+                            <!-- Download Queue -->
+                            <div class="mb-6">
+                                <h3 class="text-lg font-medium text-gray-700 mb-4 flex items-center">
+                                    <i class="fas fa-clock text-yellow-500 mr-2"></i>
+                                    Queue
+                                </h3>
+                                <div id="download-queue-list" class="space-y-3 min-h-[60px]">
+                                    <!-- Queued download transfers will be populated here -->
                                 </div>
                             </div>
                         </div>
@@ -715,7 +741,7 @@ class TransferManager {
             this.cancelTransfer(transferId);
         });
 
-        // Click outside to close
+        // Click outside to close (only on backdrop, not on modal content)
         $(document).on('click', '#transfer-manager-modal', (e) => {
             if (e.target.id === 'transfer-manager-modal') {
                 this.hideModal();
@@ -733,6 +759,10 @@ class TransferManager {
         $('.transfer-tab').removeClass('text-blue-600 border-blue-500').addClass('text-gray-500 border-transparent');
         $(`.transfer-tab[data-tab="${tab}"]`).removeClass('text-gray-500 border-transparent').addClass('text-blue-600 border-blue-500');
         
+        // Show/hide sections
+        $('.transfer-section').addClass('hidden');
+        $(`#${tab}-section`).removeClass('hidden');
+        
         this.updateUI();
     }
 
@@ -741,6 +771,11 @@ class TransferManager {
      */
     showModal() {
         $('#transfer-manager-modal').removeClass('hidden');
+        
+        // Initialize with uploads tab active
+        this.currentView = 'uploads';
+        this.switchTab('uploads');
+        
         this.updateUI();
     }
 
@@ -755,57 +790,71 @@ class TransferManager {
      * Update the modal UI
      */
     updateUI() {
-        this.updateActiveTransfers();
-        this.updateQueuedTransfers();
+        this.updateUploadTransfers();
+        this.updateDownloadTransfers();
         
         // Auto-save transfer state after UI updates
         this.saveTransferState();
     }
 
     /**
-     * Update active transfers display
+     * Update upload transfers display
      */
-    updateActiveTransfers() {
-        const container = $('#active-transfers-list');
-        const activeTransfers = Array.from(this.activeTransfers.values()).filter(t => 
+    updateUploadTransfers() {
+        const activeContainer = $('#upload-active-list');
+        const queueContainer = $('#upload-queue-list');
+        
+        // Get upload transfers
+        const activeUploads = Array.from(this.uploads.values()).filter(t => 
             t.status === 'active' || t.status === 'paused' || t.status === 'finalizing'
         );
-        const filteredTransfers = this.filterTransfersByCurrentView(activeTransfers);
+        const queuedUploads = Array.from(this.uploads.values()).filter(t => t.status === 'queued');
 
-        if (filteredTransfers.length === 0) {
-            container.html('<p class="text-gray-500 text-sm">No active transfers</p>');
-            return;
+        // Populate active uploads
+        if (activeUploads.length === 0) {
+            activeContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center">No active uploads</div>');
+        } else {
+            const html = activeUploads.map(transfer => this.renderTransferItem(transfer)).join('');
+            activeContainer.html(html);
         }
 
-        const html = filteredTransfers.map(transfer => this.renderTransferItem(transfer)).join('');
-        container.html(html);
+        // Populate queued uploads
+        if (queuedUploads.length === 0) {
+            queueContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center">No queued uploads</div>');
+        } else {
+            const html = queuedUploads.map(transfer => this.renderTransferItem(transfer)).join('');
+            queueContainer.html(html);
+        }
     }
 
     /**
-     * Update queued transfers display
+     * Update download transfers display
      */
-    updateQueuedTransfers() {
-        const container = $('#queued-transfers-list');
-        const queuedTransfers = Array.from(this.activeTransfers.values()).filter(t => t.status === 'queued');
-        const filteredTransfers = this.filterTransfersByCurrentView(queuedTransfers);
+    updateDownloadTransfers() {
+        const activeContainer = $('#download-active-list');
+        const queueContainer = $('#download-queue-list');
+        
+        // Get download transfers
+        const activeDownloads = Array.from(this.downloads.values()).filter(t => 
+            t.status === 'active' || t.status === 'paused' || t.status === 'finalizing'
+        );
+        const queuedDownloads = Array.from(this.downloads.values()).filter(t => t.status === 'queued');
 
-        if (filteredTransfers.length === 0) {
-            container.html('<p class="text-gray-500 text-sm">No queued transfers</p>');
-            return;
+        // Populate active downloads
+        if (activeDownloads.length === 0) {
+            activeContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center">No active downloads</div>');
+        } else {
+            const html = activeDownloads.map(transfer => this.renderTransferItem(transfer)).join('');
+            activeContainer.html(html);
         }
 
-        const html = filteredTransfers.map(transfer => this.renderTransferItem(transfer)).join('');
-        container.html(html);
-    }
-
-    /**
-     * Filter transfers by current view
-     */
-    filterTransfersByCurrentView(transfers) {
-        if (this.currentView === 'all') {
-            return transfers;
+        // Populate queued downloads
+        if (queuedDownloads.length === 0) {
+            queueContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center">No queued downloads</div>');
+        } else {
+            const html = queuedDownloads.map(transfer => this.renderTransferItem(transfer)).join('');
+            queueContainer.html(html);
         }
-        return transfers.filter(t => t.type === this.currentView.slice(0, -1)); // remove 's' from 'uploads'/'downloads'
     }
 
     /**
@@ -819,22 +868,24 @@ class TransferManager {
         const stats = this.renderTransferStats(transfer);
 
         return `
-            <div class="bg-gray-50 rounded-lg p-4 border">
-                <div class="flex items-center justify-between mb-2">
+            <div class="bg-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center space-x-3">
-                        <span class="${statusIcon} ${statusColor}"></span>
-                        <div>
-                            <p class="font-medium text-sm text-gray-900">${transfer.fileName}</p>
-                            <p class="text-xs text-gray-500">${transfer.type.charAt(0).toUpperCase() + transfer.type.slice(1)} • ${this.formatFileSize(transfer.fileSize)}</p>
+                        <div class="flex-shrink-0">
+                            <i class="${statusIcon} ${statusColor} text-lg"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-gray-900 truncate" title="${transfer.fileName}">${transfer.fileName}</p>
+                            <p class="text-sm text-gray-500">${transfer.type.charAt(0).toUpperCase() + transfer.type.slice(1)} • ${this.formatFileSize(transfer.fileSize)}</p>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 flex-shrink-0">
                         ${controls}
                     </div>
                 </div>
                 ${progressBar}
                 ${stats}
-                ${transfer.error ? `<p class="text-xs text-red-600 mt-2">${transfer.error}</p>` : ''}
+                ${transfer.error ? `<div class="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">${transfer.error}</div>` : ''}
             </div>
         `;
     }
@@ -903,26 +954,38 @@ class TransferManager {
      */
     renderTransferControls(transfer) {
         if (transfer.status === 'error') {
-            return `<button class="cancel-transfer-btn text-gray-400 hover:text-red-500 text-sm" data-transfer-id="${transfer.id}" title="Remove"><i class="fas fa-times"></i></button>`;
+            return `<button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Remove">
+                <i class="fas fa-times"></i>
+            </button>`;
         }
 
         if (transfer.status === 'finalizing') {
-            return `<span class="text-purple-500 text-sm" title="Processing file on server..."><i class="fas fa-cog fa-spin"></i></span>`;
+            return `<span class="px-2 py-1 rounded bg-purple-100 text-purple-600 text-sm" title="Processing file on server...">
+                <i class="fas fa-cog fa-spin mr-1"></i>Processing
+            </span>`;
         }
 
         if (transfer.status === 'active') {
-            return `<button class="pause-transfer-btn text-gray-600 hover:text-orange-500 text-sm" data-transfer-id="${transfer.id}" title="Pause"><i class="fas fa-pause"></i></button>`;
+            return `<button class="pause-transfer-btn px-2 py-1 rounded text-white bg-orange-500 hover:bg-orange-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Pause">
+                <i class="fas fa-pause"></i>
+            </button>`;
         }
 
         if (transfer.status === 'paused') {
             return `
-                <button class="resume-transfer-btn text-gray-600 hover:text-green-500 text-sm mr-2" data-transfer-id="${transfer.id}" title="Resume"><i class="fas fa-play"></i></button>
-                <button class="cancel-transfer-btn text-gray-400 hover:text-red-500 text-sm" data-transfer-id="${transfer.id}" title="Cancel"><i class="fas fa-times"></i></button>
+                <button class="resume-transfer-btn px-2 py-1 rounded text-white bg-green-500 hover:bg-green-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Resume">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel">
+                    <i class="fas fa-times"></i>
+                </button>
             `;
         }
 
         if (transfer.status === 'queued') {
-            return `<button class="cancel-transfer-btn text-gray-400 hover:text-red-500 text-sm" data-transfer-id="${transfer.id}" title="Cancel"><i class="fas fa-times"></i></button>`;
+            return `<button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-gray-500 hover:bg-red-500 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel">
+                <i class="fas fa-times"></i>
+            </button>`;
         }
 
         return '';

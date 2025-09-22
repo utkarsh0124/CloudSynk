@@ -824,12 +824,10 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         $('#settings-modal').removeClass('hidden');
     });
-    
-    $('#close-settings, #close-settings-bottom').on('click', function() {
+
+    $('#close-settings').on('click', function() {
         $('#settings-modal').addClass('hidden');
-    });
-    
-    // Settings deactivate button - redirect to main deactivate modal
+    });    // Settings deactivate button - redirect to main deactivate modal
     $('#settings-deactivate-btn').on('click', function() {
         $('#settings-modal').addClass('hidden');
         $('#deactivate-modal').removeClass('hidden');
@@ -841,7 +839,7 @@ document.addEventListener('DOMContentLoaded', function() {
         $('#about-modal').removeClass('hidden');
     });
     
-    $('#close-about, #close-about-bottom').on('click', function() {
+    $('#close-about').on('click', function() {
         $('#about-modal').addClass('hidden');
     });
 
