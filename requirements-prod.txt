@@ -1,0 +1,48 @@
+# Production requirements for CloudSynk
+# Includes base requirements plus production-specific packages
+
+# Base requirements
+-r requirements.txt
+
+# Production web server
+gunicorn==21.2.0
+
+# Static file serving
+whitenoise==6.6.0
+
+# Environment variable management
+django-environ==0.11.2
+
+# Database URL parsing
+dj-database-url==2.1.0
+
+# Production database drivers
+psycopg2-binary==2.9.9  # PostgreSQL
+# mysqlclient==2.2.0    # Uncomment for MySQL
+
+# Security enhancements
+django-security==0.18.0
+django-ratelimit==4.1.0
+django-csp==3.7
+django-permissions-policy==4.19.0
+
+# Monitoring and error tracking
+sentry-sdk==1.38.0
+
+# Cache backend
+redis==5.0.1
+django-redis==5.4.0
+
+# Production utilities
+django-extensions==3.2.3
+django-maintenance-mode==0.21.1
+
+# File validation and security
+python-magic==0.4.27
+pillow==10.1.0  # For image processing
+
+# Backup and management
+django-dbbackup==4.0.2
+
+# Health checks
+django-health-check==3.17.0
