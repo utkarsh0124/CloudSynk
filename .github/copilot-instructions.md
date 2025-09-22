@@ -1,27 +1,30 @@
 # CloudSynk AI Development Instructions
 
 ## Project Overview
-CloudSynk is a Django-based cloud storage web application with Azure Blob Storage backend. It provides dual-interface architecture: traditional HTML forms and REST API endpoints controlled by `ENABLE_API_ENDPOINTS` feature flag.
+CloudSynk is a Django-based cloud storage web application with Azure Blob Storage backend. It provides dual-interface architecture: traditional HTML forms
 
 ## Architecture & Key Components
 
 ### Dual Interface Pattern
 - **HTML endpoints** (`main/urls.py`): Traditional Django forms for browser navigation
-- **API endpoints** (`main/api_urls.py`): REST API for XHR/AJAX requests
-- Use `_is_api_request()` helper in views to detect XHR vs browser requests
-- API routes are feature-flagged via `ENABLE_API_ENDPOINTS` setting
 
 ### Azure Integration (`az_intf/`)
 - **Container pattern**: Each user gets a unique Azure blob container
 - **Singleton management**: Global `CONTAINER_INSTANCE` for Azure connections
 - **API abstraction**: `az_intf/api.py` provides high-level operations
-- **Utils layer**: `az_intf/api_utils/` handles Azure SDK specifics
 
 ### Data Models (`main/models.py`)
 - **UserInfo**: Extends Django User with subscription, quota, and container mapping
 - **Blob**: File metadata with auto-generated hash IDs (`blob_id` via MD5)
 - **Directory/Sharing**: Support for folder structure and access control
 - Hash-based primary keys for blobs/directories ensure uniqueness
+
+### Admin Panel (`main/admin.py`)
+- **Automatic Storage Quota Management**: Storage quotas automatically update when subscription type changes
+- **Subscription Integration**: Uses `subscription_config.py` for quota values
+- **Read-only Fields**: Storage quota/used bytes are read-only to prevent manual errors
+- **Audit Logging**: All subscription changes logged with admin user info
+- **Enhanced Display**: Shows storage in GB, organized fieldsets, improved list views
 
 ## Development Workflows
 
@@ -67,6 +70,13 @@ return Response({'data': ...})               # API request
 - Foreign key relationships use Django's built-in User model
 - Subscription system with choices defined in `subscription_config.py`
 
+### Admin Patterns
+- Custom admin classes with automatic storage quota updates
+- Override `save_model()` method to sync quotas with subscription changes
+- Read-only fields for system-managed values (quotas, container names)
+- Enhanced display methods for better readability (GB instead of bytes)
+- Audit logging for all admin actions
+
 ### Azure Integration
 - Container names must be lowercase (Azure requirement)
 - Blob operations go through `Container` class abstraction
@@ -77,10 +87,15 @@ return Response({'data': ...})               # API request
 - `az_intf/api.py`: Azure service facade
 - `storage_webapp/settings.py`: Feature flags and Azure config
 - `main/models.py`: Data model with hash ID generation
+- `main/admin.py`: Custom admin interface with automatic quota management
+- `main/subscription_config.py`: Subscription types and storage quota definitions
+- `main/management/commands/create_admin.py`: Admin user creation command
 - `scripts/run_all_tests.sh`: Comprehensive test runner
 
 ## Common Tasks
 - **Add new endpoint**: Create in both `urls.py` and `api_urls.py` if needed
 - **Azure operations**: Use `az_intf.api` functions, not direct Azure SDK calls
 - **Testing**: Run `./scripts/run_all_tests.sh` to verify both backend and frontend
-- **Feature flags**: Check `ENABLE_API_ENDPOINTS` for API-related changes
+- **Admin user management**: Use Django admin at `/admin/` for user subscription changes
+- **Storage quota updates**: Admin interface automatically syncs quotas with subscription types
+- **Create admin users**: Use `python manage.py create_admin` command or Django shell

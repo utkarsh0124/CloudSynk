@@ -9,6 +9,8 @@ CloudSynk is a Django-based cloud storage web application with a modern frontend
 - Modern UI (Tailwind CSS, jQuery, FontAwesome)
 - REST API endpoints for all major actions
 - Azure Blob Storage backend
+- **Django Admin Panel** with automatic storage quota management
+- Subscription-based storage quotas with admin controls
 - Automated tests for backend and frontend
 
 ## Developer Setup
@@ -42,6 +44,45 @@ CloudSynk is a Django-based cloud storage web application with a modern frontend
 	```bash
 	./scripts/run_all_tests.sh
 	```
+
+7. **Create admin user for Django admin panel:**
+	```bash
+	# Create admin user with generated secure password
+	python manage.py shell -c "
+	from django.contrib.auth.models import User
+	from main.models import UserInfo
+	from main.subscription_config import SUBSCRIPTION_VALUES
+	import secrets, string
+	
+	# Generate secure password
+	password = ''.join(secrets.choice(string.ascii_letters + string.digits + '!@#$%^&*') for _ in range(20))
+	print(f'Generated password: {password}')
+	
+	# Create admin user
+	user = User.objects.create_user('admin', 'admin@cloudsynk.com', password, is_staff=True, is_superuser=True)
+	UserInfo.objects.create(user=user, user_name='admin', subscription_type='OWNER', container_name='admin-admin', storage_quota_bytes=SUBSCRIPTION_VALUES['OWNER'], email_id='admin@cloudsynk.com')
+	print('Admin user created. Access admin panel at /admin/')
+	"
+	```
+
+## Admin Panel
+
+- **Access**: Navigate to `/admin/` and login with admin credentials
+- **User Management**: View and manage all user accounts
+- **Subscription Management**: 
+  - Change user subscription types (TESTER, STARTER, STANDARD, PREMIUM, PREMIUM_PLUS, OWNER)
+  - **Storage quotas automatically update** based on subscription type from `subscription_config.py`
+  - Storage quota field is read-only to prevent manual errors
+- **Audit Logging**: All subscription changes are logged for security
+- **Enhanced Display**: Storage shown in GB for better readability
+
+### Subscription Types & Storage Quotas:
+- **TESTER**: 1 MB
+- **STARTER**: 1 GB
+- **STANDARD**: 2 GB
+- **PREMIUM**: 10 GB
+- **PREMIUM_PLUS**: 100 GB
+- **OWNER**: 1 TB (1024 GB)
 
 ## Logging and Permissions
 
