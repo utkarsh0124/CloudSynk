@@ -490,3 +490,67 @@ class ChunkedUploadAPIView(APIView):
 
         upload_status = api_instance.get_upload_status(upload_id)
         return Response({'success': True, 'upload_status': upload_status}, status=status.HTTP_200_OK)
+    
+    def delete(self, request):
+        """Cancel upload session"""
+        upload_id = request.query_params.get('upload_id')
+        if not upload_id:
+            return Response({'success': False, 'error': 'Missing upload_id'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cancel_result = api_instance.cancel_streaming_upload(upload_id)
+        if cancel_result['success']:
+            return Response(cancel_result, status=status.HTTP_200_OK)
+        else:
+            return Response(cancel_result, status=status.HTTP_400_BAD_REQUEST)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CancelDownloadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, blob_id=None):
+        """Cancel download session (mainly for logging - actual cancellation is client-side)"""
+        if not blob_id:
+            return Response({'success': False, 'error': 'Missing blob ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        download_session_id = request.data.get('download_session_id')
+        
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cancel_result = api_instance.cancel_blob_download(blob_id, download_session_id)
+        return Response(cancel_result, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ActiveUploadsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get list of active upload sessions for the user"""
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        active_sessions = api_instance.get_active_upload_sessions()
+        return Response(active_sessions, status=status.HTTP_200_OK)

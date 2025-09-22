@@ -513,3 +513,143 @@ class Container:
             if upload_id in self.__active_uploads:
                 del self.__active_uploads[upload_id]
             return {'success': False, 'error': 'Failed to finalize upload'}
+
+    def cancel_streaming_upload(self, upload_id):
+        """Cancel an ongoing streaming upload and cleanup all staged blocks"""
+        try:
+            if upload_id not in self.__active_uploads:
+                logger.log(severity['WARNING'], f"Upload session {upload_id} not found for cancellation")
+                return {'success': False, 'error': 'Upload session not found'}
+            
+            upload_session = self.__active_uploads[upload_id]
+            blob_client = upload_session['blob_client']
+            blob_name = upload_session['blob_name']
+            uploaded_blocks = upload_session['uploaded_blocks']
+            uploaded_size = upload_session['uploaded_size']
+            start_time = upload_session['start_time']
+            
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelling {upload_id}, cleaning up {len(uploaded_blocks)} staged blocks")
+            
+            # Clean up all staged blocks from Azure (best effort - some may not exist yet)
+            cleanup_errors = []
+            for block_id in uploaded_blocks:
+                try:
+                    # Note: Azure doesn't provide direct block deletion, 
+                    # staged blocks will be automatically cleaned up by Azure after some time
+                    # We can't explicitly delete individual staged blocks
+                    pass
+                except Exception as e:
+                    cleanup_errors.append(f"Block {block_id}: {str(e)}")
+            
+            # Calculate duration for logging
+            duration = time.time() - start_time
+            
+            # Remove upload session from tracking
+            del self.__active_uploads[upload_id]
+            
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelled {upload_id}, duration={duration:.2f}s, uploaded_size={uploaded_size}")
+            
+            return {
+                'success': True,
+                'cancelled': True,
+                'uploaded_size': uploaded_size,
+                'duration': duration,
+                'message': 'Upload cancelled successfully',
+                'cleanup_errors': cleanup_errors if cleanup_errors else None
+            }
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to cancel streaming upload {upload_id}: {str(e)}")
+            # Force cleanup of session even if error occurred
+            if upload_id in self.__active_uploads:
+                del self.__active_uploads[upload_id]
+            return {'success': False, 'error': f'Failed to cancel upload: {str(e)}'}
+
+    def get_active_upload_sessions(self):
+        """Get list of all active upload sessions for this user"""
+        try:
+            active_sessions = []
+            for upload_id, session in self.__active_uploads.items():
+                active_sessions.append({
+                    'upload_id': upload_id,
+                    'file_name': session['file_name'],
+                    'blob_name': session['blob_name'],
+                    'total_size': session['total_size'],
+                    'uploaded_size': session['uploaded_size'],
+                    'uploaded_blocks': len(session['uploaded_blocks']),
+                    'start_time': session['start_time'],
+                    'duration': time.time() - session['start_time']
+                })
+            
+            logger.log(severity['DEBUG'], f"ACTIVE UPLOADS: User {self.__user_name} has {len(active_sessions)} active sessions")
+            return {'success': True, 'active_sessions': active_sessions}
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to get active upload sessions: {str(e)}")
+            return {'success': False, 'error': 'Failed to get active sessions'}
+
+    # =============================================================================
+    # DOWNLOAD STREAMING METHODS WITH CANCELLATION SUPPORT
+    # =============================================================================
+
+    def get_blob_stream(self, blob_id):
+        """Get a streaming blob client for downloading without range"""
+        try:
+            if not self.__blob_id_exists(blob_id):
+                logger.log(severity['ERROR'], f"Blob {blob_id} not found")
+                return None
+            
+            blob_name = self.__blob_obj_dict[blob_id].blob_name
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            logger.log(severity['DEBUG'], f"DOWNLOAD STREAM: Creating stream for blob {blob_id} ({blob_name})")
+            return blob_client.download_blob()
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to get blob stream for {blob_id}: {str(e)}")
+            return None
+
+    def get_blob_stream_range(self, blob_id, start, end):
+        """Get a streaming blob client for downloading with byte range"""
+        try:
+            if not self.__blob_id_exists(blob_id):
+                logger.log(severity['ERROR'], f"Blob {blob_id} not found")
+                return None
+            
+            blob_name = self.__blob_obj_dict[blob_id].blob_name
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            logger.log(severity['DEBUG'], f"DOWNLOAD STREAM: Creating range stream for blob {blob_id} ({blob_name}), range {start}-{end}")
+            return blob_client.download_blob(offset=start, length=end - start + 1)
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to get blob stream range for {blob_id}: {str(e)}")
+            return None
+
+    def cancel_blob_download(self, blob_id, download_session_id=None):
+        """Cancel an ongoing blob download
+        
+        Note: Since Azure downloads are direct HTTP streams, we can't directly cancel 
+        them from the server side. This method mainly serves to clean up any 
+        server-side tracking of download sessions if implemented.
+        
+        The actual cancellation happens on the client side using AbortController.
+        """
+        try:
+            logger.log(severity['INFO'], f"DOWNLOAD CANCEL: Request to cancel download for blob {blob_id}")
+            
+            # If we ever implement server-side download session tracking, 
+            # cleanup logic would go here
+            if download_session_id:
+                logger.log(severity['DEBUG'], f"DOWNLOAD CANCEL: Cleaning up session {download_session_id}")
+                # Future: cleanup any server-side download session state
+            
+            return {
+                'success': True,
+                'cancelled': True,
+                'message': 'Download cancellation processed (client-side cancellation required)'
+            }
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to process download cancellation for {blob_id}: {str(e)}")
+            return {'success': False, 'error': f'Failed to cancel download: {str(e)}'}

@@ -569,18 +569,105 @@ class TransferManager {
     /**
      * Cancel a transfer
      */
-    cancelTransfer(transferId) {
+    async cancelTransfer(transferId) {
         const transfer = this.activeTransfers.get(transferId) || 
                         this.uploads.get(transferId) || 
                         this.downloads.get(transferId);
 
         if (transfer) {
+            // Abort the client-side request
             transfer.abortController.abort();
+            
+            // Notify server for cleanup
+            try {
+                if (transfer.type === 'upload') {
+                    // Cancel upload session on server
+                    await this.cancelUploadOnServer(transfer.uploadId);
+                } else if (transfer.type === 'download') {
+                    // Cancel download session on server (mainly for logging)
+                    await this.cancelDownloadOnServer(transfer.blobId, transfer.id);
+                }
+            } catch (error) {
+                console.warn('Failed to notify server of cancellation:', error);
+                // Continue with client-side cleanup even if server notification fails
+            }
+            
+            // Remove from local tracking
             this.activeTransfers.delete(transferId);
             this.uploads.delete(transferId);
             this.downloads.delete(transferId);
+            
+            // Clear any stored resume data
+            this.clearResumeData(transferId);
+            
             this.updateUI();
             this.processQueue();
+        }
+    }
+
+    /**
+     * Cancel upload session on server
+     */
+    async cancelUploadOnServer(uploadId) {
+        try {
+            const response = await fetch(`/chunkedUpload/?upload_id=${uploadId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Upload cancelled on server:', result);
+            } else {
+                console.warn('Failed to cancel upload on server:', response.status);
+            }
+        } catch (error) {
+            console.warn('Error cancelling upload on server:', error);
+        }
+    }
+
+    /**
+     * Cancel download session on server
+     */
+    async cancelDownloadOnServer(blobId, downloadSessionId) {
+        try {
+            const response = await fetch(`/cancelDownload/${blobId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    download_session_id: downloadSessionId
+                }),
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Download cancelled on server:', result);
+            } else {
+                console.warn('Failed to cancel download on server:', response.status);
+            }
+        } catch (error) {
+            console.warn('Error cancelling download on server:', error);
+        }
+    }
+
+    /**
+     * Clear resume data for a transfer
+     */
+    clearResumeData(transferId) {
+        try {
+            localStorage.removeItem(`transfer_${transferId}`);
+            localStorage.removeItem(`download_${transferId}`);
+            localStorage.removeItem(`upload_${transferId}`);
+        } catch (error) {
+            console.warn('Error clearing resume data:', error);
         }
     }
 
@@ -989,38 +1076,49 @@ class TransferManager {
      */
     renderTransferControls(transfer) {
         if (transfer.status === 'error') {
-            return `<button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Remove">
-                <i class="fas fa-times"></i>
+            return `<button class="cancel-transfer-btn px-3 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm font-medium" data-transfer-id="${transfer.id}" title="Remove failed transfer">
+                <i class="fas fa-times mr-1"></i>Remove
             </button>`;
         }
 
         if (transfer.status === 'finalizing') {
-            return `<span class="px-2 py-1 rounded bg-purple-100 text-purple-600 text-sm" title="Processing file on server...">
+            return `<span class="px-3 py-1 rounded bg-purple-100 text-purple-600 text-sm font-medium" title="Processing file on server...">
                 <i class="fas fa-cog fa-spin mr-1"></i>Processing
             </span>`;
         }
 
         if (transfer.status === 'active') {
-            return `<button class="pause-transfer-btn px-2 py-1 rounded text-white bg-orange-500 hover:bg-orange-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Pause">
-                <i class="fas fa-pause"></i>
-            </button>`;
+            return `
+                <button class="pause-transfer-btn px-2 py-1 rounded text-white bg-orange-500 hover:bg-orange-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Pause transfer">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel transfer permanently">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
         }
 
         if (transfer.status === 'paused') {
             return `
-                <button class="resume-transfer-btn px-2 py-1 rounded text-white bg-green-500 hover:bg-green-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Resume">
+                <button class="resume-transfer-btn px-2 py-1 rounded text-white bg-green-500 hover:bg-green-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Resume transfer">
                     <i class="fas fa-play"></i>
                 </button>
-                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel">
+                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel transfer permanently">
                     <i class="fas fa-times"></i>
                 </button>
             `;
         }
 
         if (transfer.status === 'queued') {
-            return `<button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-gray-500 hover:bg-red-500 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel">
-                <i class="fas fa-times"></i>
+            return `<button class="cancel-transfer-btn px-3 py-1 rounded text-white bg-gray-500 hover:bg-red-500 transition-colors text-sm font-medium" data-transfer-id="${transfer.id}" title="Cancel queued transfer">
+                <i class="fas fa-times mr-1"></i>Cancel
             </button>`;
+        }
+
+        if (transfer.status === 'completed') {
+            return `<span class="px-3 py-1 rounded bg-green-100 text-green-600 text-sm font-medium" title="Transfer completed successfully">
+                <i class="fas fa-check mr-1"></i>Complete
+            </span>`;
         }
 
         return '';
@@ -1292,7 +1390,66 @@ class TransferManager {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
+
+    /**
+     * Sync with server's active upload sessions
+     */
+    async syncActiveUploadsWithServer() {
+        try {
+            const response = await fetch('/activeUploads/', {
+                method: 'GET',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.active_sessions) {
+                    console.log('Server active uploads:', result.active_sessions);
+                    
+                    // Check if we have local uploads that are no longer on server
+                    for (const [transferId, transfer] of this.uploads) {
+                        if (transfer.type === 'upload' && transfer.status === 'active') {
+                            const serverSession = result.active_sessions.find(
+                                session => session.upload_id === transfer.uploadId
+                            );
+                            
+                            if (!serverSession) {
+                                console.warn(`Upload ${transferId} not found on server, marking as failed`);
+                                transfer.status = 'error';
+                                transfer.error = 'Upload session lost on server';
+                                this.updateUI();
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to sync with server active uploads:', error);
+        }
+    }
+
+    /**
+     * Start periodic sync with server (call this on page load)
+     */
+    startServerSync() {
+        // Sync immediately
+        this.syncActiveUploadsWithServer();
+        
+        // Then sync every 30 seconds
+        setInterval(() => {
+            this.syncActiveUploadsWithServer();
+        }, 30000);
+    }
 }
 
 // Initialize global transfer manager
 window.transferManager = new TransferManager();
+
+// Start server sync on page load
+$(document).ready(function() {
+    window.transferManager.startServerSync();
+});
