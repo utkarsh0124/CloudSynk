@@ -273,12 +273,20 @@ document.addEventListener('DOMContentLoaded', function() {
                                     'Unknown file';
                 }
                 
-                // Update modal to show success message
-                $('#confirm-delete').html('<i class="fas fa-check mr-1"></i>Deleted Successfully').removeClass('bg-red-600 hover:bg-red-700').addClass('bg-green-600 hover:bg-green-700');
+                // Update modal to show processing message
+                $('#confirm-delete').html('<i class="fas fa-spinner fa-spin mr-1"></i>Deleting...').removeClass('bg-red-600 hover:bg-red-700').addClass('bg-blue-600 hover:bg-blue-700');
                 
-                setTimeout(() => {
-                    window.location = '/'; 
-                }, 1000);
+                // Update storage progress before page reload
+                if (window.updateStorageProgress) {
+                    // Trigger storage refresh (this will be handled by page reload anyway, but good practice)
+                    setTimeout(() => {
+                        window.location = '/'; 
+                    }, 1000);
+                } else {
+                    setTimeout(() => {
+                        window.location = '/'; 
+                    }, 1000);
+                }
                 return; 
             }
             throw new Error('Delete failed');
@@ -893,14 +901,54 @@ document.addEventListener('DOMContentLoaded', function() {
         setViewMode('list');
     });
 
+    // Function to update storage progress bar
+    function updateStorageProgress(usedBytes, quotaBytes) {
+        var $container = $('#storage-container');
+        if ($container.length) {
+            // Update data attributes
+            $container.attr('data-used', usedBytes);
+            $container.attr('data-quota', quotaBytes);
+            
+            // Recalculate and update progress bar
+            var used = parseFloat(usedBytes) || 0;
+            var quota = parseFloat(quotaBytes) || 0;
+            var percent = quota > 0 ? (used / quota) * 100 : 0;
+            var percentClamped = Math.min(Math.max(percent, 0), 100);
+            
+            $('#storage-bar').css('width', percentClamped.toFixed(2) + '%');
+            $('#storage-bar').attr('title', 'Used ' + percentClamped.toFixed(2) + '% of total');
+            $('#storage-bar').attr('aria-valuenow', Math.round(percentClamped));
+            
+            // Update text displays
+            var usedFormatted = formatFileSize(used);
+            var quotaFormatted = formatFileSize(quota);
+            
+            // Update sidebar storage display
+            $('.flex.flex-col.mt-2.ml-1.mr-2 .font-medium.text-gray-800').text(usedFormatted + ' / ' + quotaFormatted);
+            
+            console.log('Storage progress updated:', percentClamped.toFixed(2) + '%');
+        }
+    }
+
+    // Function to format file size (helper function)
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 bytes';
+        var k = 1024;
+        var sizes = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
     // Storage progress bar calculation
     (function() {
         var $container = $('#storage-container');
         if ($container.length) {
             var used = parseFloat($container.attr('data-used')) || 0;
             var quota = parseFloat($container.attr('data-quota')) || 0;
+            
             var percent = quota > 0 ? (used / quota) * 100 : 0;
             var percentClamped = Math.min(Math.max(percent, 0), 100);
+            
             $('#storage-bar').css('width', percentClamped.toFixed(2) + '%');
             $('#storage-bar').attr('title', 'Used ' + percentClamped.toFixed(2) + '% of total');
             $('#storage-bar').attr('role', 'progressbar');
@@ -909,6 +957,9 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#storage-bar').attr('aria-valuenow', Math.round(percentClamped));
         }
     })();
+
+    // Make updateStorageProgress available globally
+    window.updateStorageProgress = updateStorageProgress;
 
     // Quota exceeded modal functionality
     $('#quota-modal-close').on('click', function() {

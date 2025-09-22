@@ -166,6 +166,29 @@ class Container:
             return (False, "Blob name already exists. Please use a different file.")
         return (True, "Success")    
 
+    def recalculate_storage_usage(self):
+        """Recalculate and update storage usage based on actual blob sizes in database"""
+        try:
+            from main.models import Blob
+            from django.db.models import Sum
+            # Calculate total size of all blobs for this user
+            total_size = Blob.objects.filter(user_id=self.__user_obj.user).aggregate(
+                total=Sum('blob_size')
+            )['total'] or 0
+            
+            # Update the user's storage usage
+            old_usage = self.__user_obj.storage_used_bytes
+            self.__user_obj.storage_used_bytes = total_size
+            self.__user_obj.save()
+            
+            logger.log(severity['INFO'], "STORAGE RECALCULATED : User : {}, Old : {}, New : {}".format(
+                self.__user_name, old_usage, total_size))
+            
+            return True
+        except Exception as error:
+            logger.log(severity['ERROR'], "STORAGE RECALCULATION FAILED : {}".format(error))
+            return False
+
     def get_blob_info(self, blob_id=None):
         try:
             if blob_id:

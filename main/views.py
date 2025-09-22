@@ -312,6 +312,12 @@ class HomeAPIView(APIView):
         if not api_instance:
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # Recalculate storage usage to ensure accuracy
+        api_instance.recalculate_storage_usage()
+        
+        # Refresh user_info_obj after storage recalculation
+        user_info_obj = UserInfo.objects.filter(user=user).values()[0]
+
         blob_list = api_instance.get_blob_info()
 
         # convert numeric uploaded_at to datetime string for JSON serialization
@@ -343,7 +349,8 @@ class HomeAPIView(APIView):
             context = {
                 'success': True, 
                 'user_info': user_info_obj,
-                'blobs': blob_list
+                'blobs': blob_list,
+                'user': user  # Add user object for template consistency
             }
             return render(request, 'main/sample.html', context)
 

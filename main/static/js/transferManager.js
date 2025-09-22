@@ -599,10 +599,45 @@ class TransferManager {
         }
         */
         
+        // Update storage progress for uploads
+        if (transfer.type === 'upload') {
+            this.refreshStorageProgress();
+        }
+        
         // Remove from active transfers
         this.activeTransfers.delete(transfer.id);
         this.updateUI();
         this.processQueue();
+    }
+
+    /**
+     * Refresh storage progress after file operations
+     */
+    refreshStorageProgress() {
+        // Fetch updated storage information from server
+        fetch('/dashboard/', {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.user_info) {
+                // Update storage progress bar
+                if (window.updateStorageProgress) {
+                    window.updateStorageProgress(
+                        data.user_info.storage_used_bytes,
+                        data.user_info.storage_quota_bytes
+                    );
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Failed to refresh storage progress:', error);
+        });
     }
 
     /**
