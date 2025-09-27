@@ -341,8 +341,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 downloadBtn.find('span').text(originalText);
             }, 1500);
             
-            // Optionally show the transfer manager modal
-            window.transferManager.showModal();
+            // The transfer manager modal is already shown by addDownload() with downloads tab
+            // No need to call showModal() again here
         } else {
             console.error('❌ Transfer manager not available');
             alert('Transfer manager not loaded. Please refresh the page.');
