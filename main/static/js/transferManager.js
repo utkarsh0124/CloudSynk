@@ -326,7 +326,7 @@ class TransferManager {
                     // Update status to show completion but KEEP in modal
                     transfer.status = 'finalizing';
                     transfer.progress = 100;
-                    transfer.statusMessage = 'File uploaded, server combining chunks...';
+                    transfer.statusMessage = 'Finalizing uploading on server...';
                     this.updateUI();
                     
                     // Wait before showing success message
@@ -1059,7 +1059,7 @@ class TransferManager {
                 <div class="w-full bg-purple-200 rounded-full h-2">
                     <div class="bg-purple-500 h-2 rounded-full animate-pulse" style="width: 100%"></div>
                 </div>
-                <p class="text-xs text-purple-600 mt-1">⚙️ Server is combining file chunks...</p>
+                <p class="text-xs text-purple-600 mt-1">⚙️ Finalizing upload on server...</p>
             `;
         }
 
