@@ -21,7 +21,6 @@ psycopg2-binary==2.9.9  # PostgreSQL
 # mysqlclient==2.2.0    # Uncomment for MySQL
 
 # Security enhancements
-django-security==0.18.0
 django-ratelimit==4.1.0
 django-csp==3.7
 django-permissions-policy==4.19.0

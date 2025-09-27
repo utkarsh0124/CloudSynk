@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from django.shortcuts import redirect
 from .serializers import UserSerializer
 from az_intf.api_utils import utils as app_utils
@@ -284,7 +285,50 @@ class HomeAPIView(APIView):
         # Add avatar URL to the context object
         user_info_obj['avatar_url'] = avatar_url
 
-        blob_list = api_instance.get_blob_info()
+        # Check if user is admin
+        is_admin = is_admin_user(user)
+        
+        blob_list = []
+        admin_users = []
+        
+        if is_admin:
+            # For admin users, get user list instead of blob list
+            all_users = User.objects.all().order_by('-date_joined')
+            for usr in all_users:
+                try:
+                    usr_info = UserInfo.objects.get(user=usr)
+                    admin_users.append({
+                        'id': usr.id,
+                        'username': usr.username,
+                        'email': usr.email,
+                        'is_active': usr.is_active,
+                        'date_joined': usr.date_joined,
+                        'last_login': usr.last_login,
+                        'user_name': usr_info.user_name,
+                        'subscription_type': usr_info.subscription_type,
+                        'storage_used_bytes': usr_info.storage_used_bytes,
+                        'storage_quota_bytes': usr_info.storage_quota_bytes,
+                        'is_admin': usr.is_superuser or usr.is_staff or usr_info.subscription_type == 'OWNER',
+                        'avatar_url': usr_info.avatar_url
+                    })
+                except UserInfo.DoesNotExist:
+                    admin_users.append({
+                        'id': usr.id,
+                        'username': usr.username,
+                        'email': usr.email,
+                        'is_active': usr.is_active,
+                        'date_joined': usr.date_joined,
+                        'last_login': usr.last_login,
+                        'user_name': usr.username,
+                        'subscription_type': 'TESTER',
+                        'storage_used_bytes': 0,
+                        'storage_quota_bytes': SUBSCRIPTION_VALUES['TESTER'],
+                        'is_admin': usr.is_superuser or usr.is_staff,
+                        'avatar_url': None
+                    })
+        else:
+            # For regular users, get blob list
+            blob_list = api_instance.get_blob_info()
 
         # convert numeric uploaded_at to datetime string for JSON serialization
         for blob_obj in blob_list:
@@ -302,13 +346,16 @@ class HomeAPIView(APIView):
             return Response({
                 'success': True, 
                 'blobs': blob_list, 
+                'admin_users': admin_users,
+                'is_admin': is_admin,
                 'user': {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
                     'is_authenticated': True
                 },
-                'user_info': user_info_obj
+                'user_info': user_info_obj,
+                'subscription_choices': [{'value': choice[0], 'label': choice[1]} for choice in SUBSCRIPTION_CHOICES]
             }, status=status.HTTP_200_OK)
         else:
             # For direct browser access, render the template
@@ -316,7 +363,10 @@ class HomeAPIView(APIView):
                 'success': True, 
                 'user_info': user_info_obj,
                 'blobs': blob_list,
-                'user': user  # Add user object for template consistency
+                'admin_users': admin_users,
+                'is_admin': is_admin,
+                'user': user,  # Add user object for template consistency
+                'subscription_choices': SUBSCRIPTION_CHOICES
             }
             return render(request, 'main/sample.html', context)
 
@@ -562,3 +612,177 @@ class ActiveUploadsAPIView(APIView):
 
         active_sessions = api_instance.get_active_upload_sessions()
         return Response(active_sessions, status=status.HTTP_200_OK)
+
+
+# Admin views for managing users
+def is_admin_user(user):
+    """Check if user has admin privileges"""
+    try:
+        user_info = UserInfo.objects.get(user=user)
+        return (user.is_superuser or user.is_staff or 
+                user_info.subscription_type == 'OWNER')
+    except UserInfo.DoesNotExist:
+        return user.is_superuser or user.is_staff
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AdminUserListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get list of all users for admin interface"""
+        # Check if requesting user is admin
+        if not is_admin_user(request.user):
+            if not _is_api_request(request):
+                return redirect('home')
+            return Response({'success': False, 'error': 'Insufficient permissions'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Get all users with their UserInfo
+        users_data = []
+        users = User.objects.all().order_by('-date_joined')
+        
+        for user in users:
+            try:
+                user_info = UserInfo.objects.get(user=user)
+                users_data.append({
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'is_active': user.is_active,
+                    'date_joined': user.date_joined,
+                    'last_login': user.last_login,
+                    'user_name': user_info.user_name,
+                    'subscription_type': user_info.subscription_type,
+                    'storage_used_bytes': user_info.storage_used_bytes,
+                    'storage_quota_bytes': user_info.storage_quota_bytes,
+                    'is_admin': user.is_superuser or user.is_staff or user_info.subscription_type == 'OWNER',
+                    'avatar_url': user_info.avatar_url
+                })
+            except UserInfo.DoesNotExist:
+                # User without UserInfo (shouldn't happen in normal cases)
+                users_data.append({
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'is_active': user.is_active,
+                    'date_joined': user.date_joined,
+                    'last_login': user.last_login,
+                    'user_name': user.username,
+                    'subscription_type': 'TESTER',
+                    'storage_used_bytes': 0,
+                    'storage_quota_bytes': SUBSCRIPTION_VALUES['TESTER'],
+                    'is_admin': user.is_superuser or user.is_staff,
+                    'avatar_url': None
+                })
+        
+        return Response({'success': True, 'users': users_data}, status=status.HTTP_200_OK)
+
+@method_decorator(csrf_exempt, name='dispatch') 
+class AdminDeleteUserAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, user_id):
+        """Delete a user (admin only)"""
+        # Check if requesting user is admin
+        if not is_admin_user(request.user):
+            return Response({'success': False, 'error': 'Insufficient permissions'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            # Get target user
+            target_user = User.objects.get(id=user_id)
+            
+            # Prevent self-deletion
+            if target_user.id == request.user.id:
+                return Response({'success': False, 'error': 'Cannot delete your own account'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get user info for logging
+            try:
+                target_user_info = UserInfo.objects.get(user=target_user)
+                username_for_log = target_user_info.user_name
+                container_name = target_user_info.container_name
+            except UserInfo.DoesNotExist:
+                username_for_log = target_user.username
+                container_name = None
+            
+            # Delete the user (this will cascade delete UserInfo due to OneToOneField)
+            target_user.delete()
+            
+            # Log the deletion
+            logger.log(severity['INFO'], 
+                      f"Admin {request.user.username} deleted user {username_for_log} (ID: {user_id})")
+            
+            # TODO: Here you might want to also delete the Azure container if needed
+            # if container_name:
+            #     # Delete Azure storage container
+            #     pass
+            
+            return Response({'success': True, 'message': 'User deleted successfully'}, 
+                          status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({'success': False, 'error': 'User not found'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Error deleting user {user_id}: {str(e)}")
+            return Response({'success': False, 'error': 'Failed to delete user'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AdminUpdateUserSubscriptionAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, user_id):
+        """Update user subscription (admin only)"""
+        # Check if requesting user is admin
+        if not is_admin_user(request.user):
+            return Response({'success': False, 'error': 'Insufficient permissions'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        subscription_type = request.data.get('subscription_type')
+        
+        # Validate subscription type
+        valid_subscriptions = [choice[0] for choice in SUBSCRIPTION_CHOICES]
+        if subscription_type not in valid_subscriptions:
+            return Response({'success': False, 'error': 'Invalid subscription type'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get target user
+            target_user = User.objects.get(id=user_id)
+            target_user_info = UserInfo.objects.get(user=target_user)
+            
+            # Store old values for logging
+            old_subscription = target_user_info.subscription_type
+            old_quota = target_user_info.storage_quota_bytes
+            
+            # Update subscription
+            target_user_info.subscription_type = subscription_type
+            target_user_info.storage_quota_bytes = SUBSCRIPTION_VALUES[subscription_type]
+            target_user_info.save()
+            
+            # Log the change
+            logger.log(severity['INFO'], 
+                      f"Admin {request.user.username} changed user {target_user_info.user_name} "
+                      f"subscription from {old_subscription} to {subscription_type} "
+                      f"(quota: {old_quota} -> {SUBSCRIPTION_VALUES[subscription_type]} bytes)")
+            
+            return Response({
+                'success': True, 
+                'message': 'Subscription updated successfully',
+                'new_subscription': subscription_type,
+                'new_quota_bytes': SUBSCRIPTION_VALUES[subscription_type]
+            }, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({'success': False, 'error': 'User not found'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.log(severity['ERROR'], 
+                      f"Error updating subscription for user {user_id}: {str(e)}")
+            return Response({'success': False, 'error': 'Failed to update subscription'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)

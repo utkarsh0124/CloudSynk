@@ -126,6 +126,42 @@
         .storage-progress {
             transition: width 0.3s ease-in-out;
         }
+
+        /* Admin panel mobile styles */
+        @media (max-width: 640px) {
+            #admin-user-container .subscription-select {
+                min-width: 0;
+                flex: 1;
+            }
+            
+            #admin-user-container .truncate {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            
+            /* Prevent horizontal overflow in admin cards */
+            #admin-user-container > div {
+                min-width: 0;
+                overflow: hidden;
+            }
+            
+            /* Better spacing for mobile admin interface */
+            #admin-user-container .bg-white {
+                padding: 1rem;
+            }
+        }
+        
+        /* Additional responsive utilities */
+        .text-truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .min-w-0 {
+            min-width: 0;
+        }
         {% endblock %}
     </style>
 </head>
