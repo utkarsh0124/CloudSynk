@@ -21,6 +21,7 @@ class UserInfo(models.Model):
     storage_used_bytes = models.BigIntegerField(null=False, default=0)
     dob = models.DateField(null=True, blank=True)
     email_id = models.EmailField(max_length=254, null=True, blank=True)
+    avatar_url = models.CharField(max_length=500, null=True, blank=True)  # Store path to local avatar image
 
 class Blob(models.Model):
     blob_id = models.SlugField(max_length=MAX_HASH_ID_FIELD_LENGTH, unique=True, editable=False, null=False, blank=False) # primary key

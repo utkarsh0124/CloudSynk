@@ -70,6 +70,10 @@ class Container:
                 return True
             logger.log(severity['DEBUG'], "CONTAINER CREATE SUCCESS : User Name : {}, Container Name : {}, Email ID : {}".format(username, container_name, email_id))
             
+            # Generate and store avatar
+            from main.utils import generate_and_store_avatar
+            avatar_url = generate_and_store_avatar(username)
+            
             # add container to db
             user_info, created = UserInfo.objects.get_or_create(
                 user=user_obj,
@@ -80,7 +84,8 @@ class Container:
                     'storage_quota_bytes': dict(SUBSCRIPTION_VALUES)[DEFAULT_SUBSCRIPTION_AT_INIT],
                     'storage_used_bytes': 0,
                     'dob': None,
-                    'email_id': email_id
+                    'email_id': email_id,
+                    'avatar_url': avatar_url
                 }
             )
             if not created:

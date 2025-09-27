@@ -18,6 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from storage_webapp import logger, severity
 from django.http import StreamingHttpResponse
+from .utils import get_avatar_url
 import requests
 
 def _is_api_request(request):
@@ -275,6 +276,13 @@ class HomeAPIView(APIView):
         
         # Refresh user_info_obj after storage recalculation
         user_info_obj = UserInfo.objects.filter(user=user).values()[0]
+        
+        # Get the UserInfo model instance for avatar URL calculation
+        user_info_instance = UserInfo.objects.get(user=user)
+        avatar_url = get_avatar_url(user_info_instance)
+        
+        # Add avatar URL to the context object
+        user_info_obj['avatar_url'] = avatar_url
 
         blob_list = api_instance.get_blob_info()
 
