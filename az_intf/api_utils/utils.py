@@ -3,6 +3,9 @@ import os
 import random
 import string
 
+import re
+#from urllib.parse import quote, unquote
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 
@@ -72,3 +75,122 @@ def get_blob_sas_url(container_name, blob_name, permission="r", expiry_hours=1):
     except Exception as error:
         logger.log(severity['ERROR'], f"Failed to generate BLOB SAS URL: {error}")
         return None
+    
+class AzureBlobNameValidator:
+    """Validates and sanitizes blob names according to Azure Storage rules"""
+    
+    # Azure blob naming constraints
+    MIN_LENGTH = 1
+    MAX_LENGTH = 1024
+    
+    # Valid characters: letters, numbers, and these special chars
+    VALID_CHARS_PATTERN = r'^[a-zA-Z0-9\-_\.\/]+$'
+    
+    # Reserved/problematic patterns
+    RESERVED_ENDINGS = ['.', '/']
+    
+    @classmethod
+    def validate_blob_name(cls, blob_name: str) -> dict:
+        """
+        Validate a blob name against Azure Storage requirements
+        
+        Args:
+            blob_name (str): The blob name to validate
+            
+        Returns:
+            dict: {
+                'is_valid': bool,
+                'errors': list,
+                'sanitized_name': str,
+                'original_name': str
+            }
+        """
+        errors = []
+        sanitized = blob_name
+        
+        if not blob_name:
+            return {
+                'is_valid': False,
+                'errors': ['Blob name cannot be empty'],
+                'sanitized_name': 'unnamed_file',
+                'original_name': blob_name
+            }
+        
+        # Check length
+        if len(blob_name) < cls.MIN_LENGTH:
+            errors.append(f'Blob name must be at least {cls.MIN_LENGTH} character long')
+        elif len(blob_name) > cls.MAX_LENGTH:
+            errors.append(f'Blob name must be at most {cls.MAX_LENGTH} characters long')
+            sanitized = sanitized[:cls.MAX_LENGTH]
+        
+        # Check for reserved endings
+        for ending in cls.RESERVED_ENDINGS:
+            if blob_name.endswith(ending):
+                errors.append(f'Blob name cannot end with "{ending}"')
+                sanitized = sanitized.rstrip(ending)
+        
+        # Check valid characters
+        if not re.match(cls.VALID_CHARS_PATTERN, blob_name):
+            errors.append('Blob name contains invalid characters')
+            sanitized = cls._sanitize_name(sanitized)
+        
+        # Final validation of sanitized name
+        if not sanitized:
+            sanitized = 'unnamed_file'
+        
+        return {
+            'is_valid': len(errors) == 0,
+            'errors': errors,
+            'sanitized_name': sanitized,
+            'original_name': blob_name
+        }
+    
+    @classmethod
+    def _sanitize_name(cls, name: str) -> str:
+        """
+        Sanitize a blob name by replacing invalid characters
+        
+        Args:
+            name (str): Name to sanitize
+            
+        Returns:
+            str: Sanitized name
+        """
+        # Replace invalid characters with underscore, but preserve forward slashes for directories
+        sanitized = re.sub(r'[^a-zA-Z0-9\-_\.\/]', '_', name)
+        
+        # Remove consecutive underscores, dashes, or dots (but preserve forward slashes)
+        sanitized = re.sub(r'[_\-\.]{2,}', '_', sanitized)
+        
+        # Clean up leading/trailing special characters except forward slash
+        sanitized = sanitized.strip('_-.')
+        
+        # Ensure it doesn't end with reserved characters
+        for ending in cls.RESERVED_ENDINGS:
+            sanitized = sanitized.rstrip(ending)
+        
+        return sanitized if sanitized else 'unnamed_file'
+    
+    @classmethod
+    def sanitize_blob_name(cls, blob_name: str) -> str:
+        """
+        Quick sanitization method that returns a valid blob name
+        
+        Args:
+            blob_name (str): Name to sanitize
+            
+        Returns:
+            str: Valid Azure blob name
+        """
+        result = cls.validate_blob_name(blob_name)
+        return result['sanitized_name']
+
+
+def validate_azure_blob_name(blob_name: str) -> dict:
+    """Convenience function for blob name validation"""
+    return AzureBlobNameValidator.validate_blob_name(blob_name)
+
+
+def sanitize_azure_blob_name(blob_name: str) -> str:
+    """Convenience function for blob name sanitization"""
+    return AzureBlobNameValidator.sanitize_blob_name(blob_name)

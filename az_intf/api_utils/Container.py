@@ -1,5 +1,6 @@
 import time
 import base64
+import re
 
 # from django.contrib.auth.models import User
 from azure.storage.blob import ContainerClient, BlobServiceClient
@@ -9,6 +10,7 @@ from main.subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from storage_webapp import logger, severity
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 from .utils import AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_ENDPOINT_SUFFIX
+from .utils import validate_azure_blob_name, sanitize_azure_blob_name
 
 
 class Container:
@@ -161,7 +163,30 @@ class Container:
             delete_success = False
         return delete_success
 
+    def validate_blob_name(self, blob_name: str) -> dict:
+        """
+        Validate blob name against Azure Storage naming requirements
+        
+        Returns:
+            dict: {
+                'is_valid': bool,
+                'sanitized_name': str,
+                'errors': list
+            }
+        """
+        return validate_azure_blob_name(blob_name)
+
     def validate_new_blob_addition(self, new_blob_size, blob_name):
+        # First validate Azure blob naming requirements
+        name_validation = self.validate_blob_name(blob_name)
+        if not name_validation['is_valid']:
+            error_msg = f"Invalid blob name: {'; '.join(name_validation['errors'])}"
+            logger.log(severity['DEBUG'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+            return (False, error_msg)
+        
+        # Use sanitized name for further checks
+        sanitized_name = name_validation['sanitized_name']
+        
         # validate against user's quota
         if self.__user_obj.storage_used_bytes + new_blob_size > self.__user_obj.storage_quota_bytes:
             logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : User Name : {}, Used : {}, Quota : {}, New Blob Size : {}".format(self.__user_name,
@@ -169,11 +194,13 @@ class Container:
                        self.__user_obj.storage_quota_bytes,
                        new_blob_size))
             return (False, "Storage quota exceeded. Please delete some files before uploading new ones or Upgrade your Subscription")
-        # validate blob name uniqueness
-        if self.__blob_name_exists(blob_name):
-            logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(blob_name))
+        
+        # validate blob name uniqueness (using sanitized name)
+        if self.__blob_name_exists(sanitized_name):
+            logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(sanitized_name))
             return (False, "Blob name already exists. Please use a different file.")
-        return (True, "Success")    
+        
+        return (True, "Success", sanitized_name)  # Return sanitized name for use    
 
     def recalculate_storage_usage(self):
         """Recalculate and update storage usage based on actual blob sizes in database"""
@@ -259,7 +286,17 @@ class Container:
         logger.log(severity['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}".format(blob_name, blob_size_bytes, blob_type))
         assigned_blob_id = None
         try:
-            if self.__blob_name_exists(blob_name):
+            # Validate Azure blob naming requirements
+            name_validation = self.validate_blob_name(blob_name)
+            if not name_validation['is_valid']:
+                error_msg = f"Invalid blob name: {'; '.join(name_validation['errors'])}"
+                logger.log(severity['WARNING'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+                return (False, assigned_blob_id)
+            
+            # Use sanitized name
+            sanitized_blob_name = name_validation['sanitized_name']
+            
+            if self.__blob_name_exists(sanitized_blob_name):
                 logger.log(severity['INFO'], "BLOB ALREADY EXISTS")
                 return (False, assigned_blob_id)
             # add debug log
@@ -289,12 +326,12 @@ class Container:
                     self.__user_obj.delete()
                     return (False, None)
                 else:
-                    logger.log(severity['INFO'], "BLOB CREATE : Uploading provided file as blob : {}".format(blob_name))
-                    blob_client = self.__container_client.get_blob_client(blob_name)
+                    logger.log(severity['INFO'], "BLOB CREATE : Uploading provided file as blob : {}".format(sanitized_blob_name))
+                    blob_client = self.__container_client.get_blob_client(sanitized_blob_name)
 
                     file_like = getattr(blob_file, "file", blob_file)
                     blob_client.upload_blob(file_like, overwrite=True)
-                logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(blob_name, self.__user_obj.container_name))
+                logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(sanitized_blob_name, self.__user_obj.container_name))
             else:
                 logger.log(severity['ERROR'], "BLOB CREATE FAILED : CONTAINER CLIENT NOT INITIALIZED")
                 self.__user_obj.delete()
@@ -305,7 +342,7 @@ class Container:
             logger.log(severity['DEBUG'], "BLOB CREATE : Updated storage used for user : {}, New Used : {}".format(self.__user_name,
                        self.__user_obj.storage_used_bytes))
 
-            result, assigned_blob_id = self.__add_blob_to_db(blob_name, blob_size_bytes, blob_type)
+            result, assigned_blob_id = self.__add_blob_to_db(sanitized_blob_name, blob_size_bytes, blob_type)
             if not result:
                 logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION")
                 self.__user_obj.delete()
@@ -399,16 +436,16 @@ class Container:
                 logger.log(severity['WARNING'], f"Upload session {upload_id} already exists")
                 return {'success': False, 'error': 'Upload session already exists'}
             
-            # Generate unique blob name with timestamp to avoid conflicts
-            # Sanitize file name for Azure blob naming requirements (only alphanumeric, hyphens, underscores, periods)
-            import re
-            sanitized_name = re.sub(r'[^a-zA-Z0-9\-_\.]', '_', file_name)
-            # Ensure no consecutive special characters and valid start/end
-            sanitized_name = re.sub(r'[_\-\.]{2,}', '_', sanitized_name)
-            sanitized_name = sanitized_name.strip('_-.')
-            if not sanitized_name:
-                sanitized_name = "file"
-            blob_name = f"{int(time.time())}-{sanitized_name}"
+            # Validate Azure blob naming requirements
+            name_validation = self.validate_blob_name(file_name)
+            if not name_validation['is_valid']:
+                error_msg = f"Invalid file name: {'; '.join(name_validation['errors'])}"
+                logger.log(severity['WARNING'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+                return {'success': False, 'error': error_msg}
+            
+            # Use sanitized name
+            blob_name = name_validation['sanitized_name']
+            logger.log(severity['DEBUG'], f"Using sanitized blob name: {blob_name}")
             
             # Create blob client for Azure operations
             blob_client = self.__service_client.get_blob_client(
