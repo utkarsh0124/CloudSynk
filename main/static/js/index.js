@@ -134,12 +134,29 @@ document.addEventListener('DOMContentLoaded', function() {
             // Check if it's a quota-related error
             if (data?.error && isQuotaError(data.error)) {
                 showQuotaExceededModal(file, data.error);
+            } else if (data?.error && isDuplicateFilenameError(data.error)) {
+                showDuplicateFilenameModal(file, data.error);
             } else {
                 alert(data?.error || 'Upload failed');
             }
         })
         .catch(err => { console.error('Upload error', err); alert('Upload error'); })
         .finally(() => { if (fileInput) fileInput.disabled = false; });
+    }
+
+    // Function to check if error is duplicate filename related
+    function isDuplicateFilenameError(errorMessage) {
+        const duplicateKeywords = [
+            'blob name already exists',
+            'file with this name already exists',
+            'filename already exists',
+            'duplicate filename',
+            'name already exists',
+            'please use a different file'
+        ];
+        return duplicateKeywords.some(keyword => 
+            errorMessage.toLowerCase().includes(keyword)
+        );
     }
 
     // Function to check if error is quota-related
@@ -155,6 +172,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return quotaKeywords.some(keyword => 
             errorMessage.toLowerCase().includes(keyword)
         );
+    }
+
+    // Function to show duplicate filename modal
+    function showDuplicateFilenameModal(file, errorMessage) {
+        // Update modal content
+        $('#duplicate-error-message').text(errorMessage);
+        $('#duplicate-file-name').text(file.name);
+        $('#duplicate-file-size').text(formatFileSize(file.size));
+        
+        // Show the modal
+        $('#duplicate-filename-modal').removeClass('hidden');
     }
 
     // Function to show quota exceeded modal
@@ -978,6 +1006,19 @@ document.addEventListener('DOMContentLoaded', function() {
         $('#quota-exceeded-modal').addClass('hidden');
         // Open settings modal to show subscription info
         $('#settings-modal').removeClass('hidden');
+    });
+
+    // Duplicate filename modal functionality
+    $('#duplicate-modal-close').on('click', function() {
+        $('#duplicate-filename-modal').addClass('hidden');
+    });
+    
+    $('#duplicate-manage-files').on('click', function() {
+        $('#duplicate-filename-modal').addClass('hidden');
+        // Scroll to file list area
+        $('html, body').animate({
+            scrollTop: $('#file-list-container').offset().top - 100
+        }, 500);
     });
 
     // Mobile nav toggle

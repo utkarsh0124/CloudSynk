@@ -697,7 +697,7 @@ class AdminDeleteUserAPIView(APIView):
                 return Response({'success': False, 'error': 'Cannot delete your own account'}, 
                               status=status.HTTP_400_BAD_REQUEST)
             
-            # Get user info for logging
+            # Get user info for logging and container deletion
             try:
                 target_user_info = UserInfo.objects.get(user=target_user)
                 username_for_log = target_user_info.user_name
@@ -706,19 +706,38 @@ class AdminDeleteUserAPIView(APIView):
                 username_for_log = target_user.username
                 container_name = None
             
-            # Delete the user (this will cascade delete UserInfo due to OneToOneField)
+            # Delete Azure storage container and all associated data
+            if container_name and container_name != "None":
+                try:
+                    # Import Container class to handle Azure container deletion
+                    from az_intf.api_utils.Container import Container
+                    
+                    # Create container instance for the target user
+                    container_handler = Container(username_for_log)
+                    
+                    # Delete the Azure container and associated database records
+                    container_deleted = container_handler.container_delete(target_user_info)
+                    
+                    if container_deleted:
+                        logger.log(severity['INFO'], 
+                                  f"Successfully deleted container '{container_name}' for user {username_for_log}")
+                    else:
+                        logger.log(severity['WARNING'], 
+                                  f"Failed to delete container '{container_name}' for user {username_for_log}")
+                        
+                except Exception as container_error:
+                    logger.log(severity['ERROR'], 
+                              f"Error deleting container for user {username_for_log}: {str(container_error)}")
+                    # Continue with user deletion even if container deletion fails
+            
+            # Delete the user (this will cascade delete UserInfo, Blob, Directory records due to CASCADE)
             target_user.delete()
             
             # Log the deletion
             logger.log(severity['INFO'], 
-                      f"Admin {request.user.username} deleted user {username_for_log} (ID: {user_id})")
+                      f"Admin {request.user.username} deleted user {username_for_log} (ID: {user_id}) and associated data")
             
-            # TODO: Here you might want to also delete the Azure container if needed
-            # if container_name:
-            #     # Delete Azure storage container
-            #     pass
-            
-            return Response({'success': True, 'message': 'User deleted successfully'}, 
+            return Response({'success': True, 'message': 'User and all associated data deleted successfully'}, 
                           status=status.HTTP_200_OK)
             
         except User.DoesNotExist:

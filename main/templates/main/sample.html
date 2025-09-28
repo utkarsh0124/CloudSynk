@@ -113,6 +113,41 @@
       </div>
     </div>
 
+    <!-- Duplicate Filename Modal -->
+    <div id="duplicate-filename-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
+      <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+        <h2 class="text-lg font-semibold mb-4 text-red-600 flex items-center">
+          <i class="fas fa-copy mr-2"></i>
+          File Already Exists
+        </h2>
+        <div class="mb-4">
+          <p class="text-gray-700 mb-3" id="duplicate-error-message">
+            A file with this name already exists in your storage.
+          </p>
+          <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+            <div class="flex justify-between text-sm">
+              <span class="text-gray-600">File Name:</span>
+              <span class="font-medium text-gray-800 break-all" id="duplicate-file-name">-</span>
+            </div>
+            <div class="flex justify-between text-sm mt-2 pt-2 border-t border-red-200">
+              <span class="text-gray-600">File Size:</span>
+              <span class="font-medium text-red-600" id="duplicate-file-size">-</span>
+            </div>
+          </div>
+          <p class="text-sm text-gray-600">
+            Please rename your file before uploading, or delete the existing file if you want to replace it.
+          </p>
+        </div>
+        <div class="flex justify-end space-x-3">
+          <button id="duplicate-manage-files" class="px-4 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors">
+            <i class="fas fa-folder-open mr-1"></i>
+            Manage Files
+          </button>
+          <button id="duplicate-modal-close" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settings-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden transition-all duration-300">
       <div class="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full mx-4 transform transition-all duration-300">
@@ -370,7 +405,11 @@
       <div id="delete-user-modal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50 hidden">
         <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
           <h2 class="text-lg font-semibold mb-4 text-red-600">Confirm User Deletion</h2>
-          <p class="mb-4 text-gray-700">Are you sure you want to delete user "<span id="delete-user-name" class="font-medium"></span>"? This action cannot be undone and will permanently remove all their data.</p>
+          <p class="mb-4 text-gray-700">Are you sure you want to delete user "<span id="delete-user-name" class="font-medium"></span>"? This action cannot be undone and will permanently remove:
+            <br><span class="text-sm text-gray-600 mt-2 block">• User account and profile</span>
+            <span class="text-sm text-gray-600 block">• All uploaded files and storage</span>
+            <span class="text-sm text-gray-600 block">• Associated data and settings</span>
+          </p>
           <div class="flex justify-end space-x-3">
             <button id="cancel-delete-user" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
             <button id="confirm-delete-user" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Yes, Delete User</button>
