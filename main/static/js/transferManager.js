@@ -10,6 +10,7 @@ class TransferManager {
         this.downloads = new Map();
         this.activeTransfers = new Map();
         this.maxConcurrentTransfers = 1;
+        this.maxConcurrentUploads = 1; // Only allow 1 upload at a time
         this.chunkSize = 1 * 1024 * 1024; // 1MB chunks
         this.currentView = 'all'; // all, uploads, downloads
         this.pageReloadPending = false; // Track if page reload is pending
@@ -67,7 +68,27 @@ class TransferManager {
             console.error('❌ Cannot upload empty file (0 bytes):', file.name);
             this.showNotification(`Cannot upload empty file "${file.name}" (0 bytes)`, 'error');
             return false;
-        }        
+        }
+        
+        // Check if there are any active or queued uploads
+        const existingUploads = Array.from(this.uploads.values()).filter(t => 
+            ['queued', 'active', 'finalizing'].includes(t.status)
+        );
+        
+        if (existingUploads.length >= this.maxConcurrentUploads) {
+            const currentUpload = existingUploads[0];
+            console.warn('⚠️ Upload already in progress:', currentUpload.fileName);
+            this.showNotification(
+                `Upload already in progress: "${currentUpload.fileName}". Please wait for it to complete before uploading another file.`,
+                'warning',
+                7000 // Show longer for this important message
+            );
+            
+            // Show the transfer manager to let user see current upload
+            this.showModal('uploads');
+            return false;
+        }
+        
         const transferId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         const transfer = {
@@ -119,6 +140,7 @@ class TransferManager {
     async processQueue() {
         // Don't start new transfers if page reload is pending
         if (this.pageReloadPending) {
+            console.log('Page reload pending, skipping queue processing');
             return;
         }
 
@@ -129,9 +151,26 @@ class TransferManager {
             return;
         }
 
-        // Find next queued transfer
-        const queuedTransfer = Array.from(this.activeTransfers.values())
-            .find(t => t.status === 'queued');
+        // Count active uploads and downloads separately
+        const activeUploads = Array.from(this.activeTransfers.values())
+            .filter(t => t.type === 'upload' && t.status === 'active').length;
+        const activeDownloads = Array.from(this.activeTransfers.values())
+            .filter(t => t.type === 'download' && t.status === 'active').length;
+
+        // Find next queued transfer, prioritizing uploads to complete them quickly
+        let queuedTransfer = null;
+        
+        // If no uploads are active, allow one upload to start
+        if (activeUploads === 0) {
+            queuedTransfer = Array.from(this.activeTransfers.values())
+                .find(t => t.type === 'upload' && t.status === 'queued');
+        }
+        
+        // If no upload found or uploads are at limit, try downloads
+        if (!queuedTransfer && activeDownloads === 0) {
+            queuedTransfer = Array.from(this.activeTransfers.values())
+                .find(t => t.type === 'download' && t.status === 'queued');
+        }
 
         if (!queuedTransfer) {
             return;
@@ -983,7 +1022,7 @@ class TransferManager {
 
         // Populate queued uploads
         if (queuedUploads.length === 0) {
-            queueContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center">No queued uploads</div>');
+            queueContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center"><i class="fas fa-info-circle mr-2"></i>Only one file can be uploaded at a time</div>');
         } else {
             const html = queuedUploads.map(transfer => this.renderTransferItem(transfer)).join('');
             queueContainer.html(html);
