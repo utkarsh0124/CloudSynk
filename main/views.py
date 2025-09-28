@@ -4,23 +4,28 @@ from rest_framework import status, permissions
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.shortcuts import redirect
-from .serializers import UserSerializer
+from .serializers import UserSerializer, OTPVerifySerializer
 from az_intf.api_utils import utils as app_utils
 from az_intf import api as az_api
-from .models import UserInfo
+from .models import UserInfo, PendingUser
+from django.contrib.auth.hashers import make_password
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 from .subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import render
 from django.conf import settings
+from django.core.mail import send_mail  # keep for backward compatibility if needed
+from .mailing import send_otp_email
 from apiConfig import AZURE_API_DISABLE
-from datetime import datetime
+from datetime import datetime, timedelta
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from storage_webapp import logger, severity
 from django.http import StreamingHttpResponse
 from .utils import get_avatar_url
 import requests
+import random
 
 def _is_api_request(request):
     """Return True if the request should be treated as an API/XHR call returning JSON.
@@ -82,22 +87,140 @@ class SignupAPIView(APIView):
 
         if app_utils.user_exists(username):
             return Response({'success': False, 'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = serializer.create({'username': username, 'password': password, 'email': email})
-
-        created = az_api.init_container(user, username, app_utils.assign_container(username), email)
-        if not created:
-            return Response({'success': False, 'error': 'Container Initialization Failed'}, status=status.HTTP_400_BAD_REQUEST)
-
-        container_instance = az_api.get_container_instance(username)
-        if container_instance is None:
-            user.delete()
-            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        # API request: return JSON; browser request: redirect to login
+        # Stage user signup in SignupRequest
+        code = f"{random.randint(100000, 999999)}"
+        expires_at = timezone.now() + timedelta(minutes=10)
+        # Create or update pending signup to avoid duplicates
+        pending = PendingUser.objects.filter(username=username).first()
+        if pending:
+            if pending.is_expired():
+                pending.delete()
+                pending = PendingUser.objects.create(
+                    username=username,
+                    password=make_password(password),
+                    email=email,
+                    code=code,
+                    expires_at=expires_at
+                )
+            else:
+                pending.code = code
+                pending.expires_at = expires_at
+                pending.password = make_password(password)
+                pending.email = email
+                pending.save()
+        else:
+            pending = PendingUser.objects.create(
+                username=username,
+                password=make_password(password),
+                email=email,
+                code=code,
+                expires_at=expires_at
+            )
+        # Send OTP via email
+        subject = 'Your CloudSynk OTP Verification Code'
+        message = f'Use the following OTP to verify your account: {code}'
+        from_email = settings.DEFAULT_FROM_EMAIL
+        # Send OTP via SMTP utility
+        try:
+            send_otp_email(email, subject, message)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to send OTP email: {e}")
+        # Return response indicating OTP sent (API) or render OTP page (browser)
         if _is_api_request(request):
-            return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
-        return redirect('/login/')
+            return Response({'success': True, 'message': 'OTP sent to email.', 'pending_id': pending.id}, status=status.HTTP_201_CREATED)
+        return render(request, 'user/verify_otp.html', {'pending_id': pending.id})
+
+class OTPVerifyAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        pending_id = request.data.get('pending_id')
+        code = request.data.get('code')
+        try:
+            pending = PendingUser.objects.get(id=pending_id)
+        except PendingUser.DoesNotExist:
+            return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check max OTP entry attempts
+        if pending.otp_attempts >= 5:
+            pending.delete()
+            return Response({'success': False, 'error': 'Maximum OTP attempts exceeded. Please signup again.'}, status=status.HTTP_403_FORBIDDEN)
+        # Validate code
+        if pending.code != code or pending.is_expired():
+            pending.otp_attempts += 1
+            pending.save()
+            attempts_left = max(0, 5 - pending.otp_attempts)
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Incorrect OTP. Please try again.',
+                    'attempts_left': attempts_left
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Successful verification, proceed
+        # Create actual user with hashed password
+        user = User.objects.create(
+            username=pending.username,
+            password=pending.password,
+            email=pending.email
+        )
+        user.is_active = True
+        user.save()
+        # Create UserInfo record
+        UserInfo.objects.create(
+            user=user,
+            user_name=pending.username,
+            email_id=pending.email,
+            subscription_type=DEFAULT_SUBSCRIPTION_AT_INIT
+        )
+        # Initialize container
+        created = az_api.init_container(user, user.username, app_utils.assign_container(user.username), user.email)
+        if not created:
+            return Response({'success': False, 'error': 'Container initialization failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Remove pending registration
+        pending.delete()
+        return Response({'success': True, 'message': 'Account created and activated.'}, status=status.HTTP_200_OK)
+
+class ResendOTPAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        pending_id = request.data.get('pending_id')
+        if not pending_id:
+            return Response({'success': False, 'error': 'Missing pending_id'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            pending = PendingUser.objects.get(id=pending_id)
+        except PendingUser.DoesNotExist:
+            return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check expiration
+        if pending.is_expired():
+            pending.delete()
+            return Response({'success': False, 'error': 'OTP request expired, please signup again.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Throttle resends
+        now = timezone.now()
+        elapsed = (now - pending.last_sent_at).total_seconds()
+        if elapsed < 180:
+            retry_after = int(180 - elapsed)
+            return Response({'success': False, 'error': f'Please wait {retry_after}s before resending.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if pending.resend_count >= 2:
+            return Response({'success': False, 'error': 'Maximum resend attempts reached.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        # Generate new OTP
+        code = f"{random.randint(100000, 999999)}"
+        pending.code = code
+        pending.last_sent_at = now
+        pending.expires_at = now + timedelta(minutes=10)
+        pending.resend_count += 1
+        pending.save()
+        # Send OTP via email
+        subject = 'Your CloudSynk OTP Verification Code'
+        message = f'Use the following OTP to verify your account: {code}'
+        # Send OTP via SMTP utility
+        try:
+            send_otp_email(pending.email, subject, message)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to resend OTP email: {e}")
+        resends_left = max(0, 2 - pending.resend_count)
+        return Response({'success': True, 'resend_count': pending.resend_count, 'resends_left': resends_left}, status=status.HTTP_200_OK)
 
 class LoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]

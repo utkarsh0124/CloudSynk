@@ -162,6 +162,12 @@ REST_FRAMEWORK = {
     ),
 }
 
+# Email configuration for development: output emails to console
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Default from email for outgoing mails
+# get email id from environment variable or set a default
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@cloudsynk.local')
+
 
 # allauth minimal config (email optional)
 SITE_ID = 1

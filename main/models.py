@@ -3,7 +3,8 @@ from django.contrib.auth.models import User
 import hashlib
 import time
 from .subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
-
+from django.utils import timezone
+from django.contrib.auth.hashers import make_password
 
 MAX_HASH_ID_FIELD_LENGTH = 12
 MAX_BLOB_NAME_LENGTH = 1024
@@ -80,3 +81,44 @@ class Directory(models.Model):
             unique_string = f"directory-{self.directory_name}-{time.time()}"
             self.directory_id = hashlib.md5(unique_string.encode()).hexdigest()[:MAX_HASH_ID_FIELD_LENGTH]
         super().save(*args, **kwargs)
+
+
+class OTP(models.Model):
+    user = models.ForeignKey(
+        'auth.User', on_delete=models.CASCADE, related_name='otps'
+    )
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+
+class PendingUser(models.Model):
+    username = models.CharField(max_length=150, unique=True)
+    password = models.CharField(max_length=128)  # hashed password
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    # Track OTP resends
+    resend_count = models.IntegerField(default=1)
+    last_sent_at = models.DateTimeField(default=timezone.now)
+    # Track OTP entry attempts
+    otp_attempts = models.IntegerField(default=0)
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+
+class SignupRequest(models.Model):
+    username = models.CharField(max_length=150, unique=True)
+    password = models.CharField(max_length=128)  # hashed password
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserInfo
+# ...existing imports...
+from .models import UserInfo, PendingUser
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -41,3 +42,20 @@ class SignupSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True)
+
+
+class OTPVerifySerializer(serializers.Serializer):
+    pending_id = serializers.IntegerField()
+    code = serializers.CharField(max_length=6)
+
+    def validate(self, data):
+        pending_id = data.get('pending_id')
+        code = data.get('code')
+        try:
+            pending = PendingUser.objects.get(id=pending_id)
+        except PendingUser.DoesNotExist:
+            raise serializers.ValidationError('Invalid registration reference')
+        if pending.code != code or pending.is_expired():
+            raise serializers.ValidationError('OTP expired or invalid')
+        data['pending'] = pending
+        return data

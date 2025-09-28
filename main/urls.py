@@ -13,6 +13,8 @@ urlpatterns = [
     path("chunkedUpload/", views.ChunkedUploadAPIView.as_view(), name="chunked_upload"),
     path("cancelDownload/<str:blob_id>/", views.CancelDownloadAPIView.as_view(), name="cancel_download"),
     path("activeUploads/", views.ActiveUploadsAPIView.as_view(), name="active_uploads"),
+    path("signup/verify-otp/", views.OTPVerifyAPIView.as_view(), name="verify_otp"),
+    path("signup/resend-otp/", views.ResendOTPAPIView.as_view(), name="resend_otp"),
     
     # Admin URLs
     path("admin/users/", views.AdminUserListAPIView.as_view(), name="admin_users"),

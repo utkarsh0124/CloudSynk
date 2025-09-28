@@ -1,0 +1,64 @@
+{% extends 'main/base.html' %}
+{% load static %}
+
+{% block title %}Verify OTP - CloudSynk{% endblock %}
+
+{% block extra_css %}
+<style>
+  .otp-card { backdrop-filter: blur(10px); background: rgba(255,255,255,0.95); box-shadow: 0 25px 45px rgba(0,0,0,0.1); }
+  .error { color: red; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md otp-card rounded-2xl p-8">
+    <h2 class="text-center text-2xl mb-6">Enter OTP</h2>
+    <div id="alert" class="mb-4 hidden text-center"></div>
+    <form id="otp-form">
+      {% csrf_token %}
+      <input type="hidden" name="pending_id" id="pending_id" value="{{ pending_id }}">
+      <div class="mb-4">
+        <input type="text" name="code" id="code" required placeholder="6-digit OTP"
+               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <button type="submit" id="verify-btn" class="btn-primary w-full py-3 text-white rounded-lg">Verify</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const form = document.getElementById('otp-form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('code').value;
+    const pending_id = document.getElementById('pending_id').value;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const alertBox = document.getElementById('alert');
+    try {
+      const res = await fetch("{% url 'verify_otp' %}", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ pending_id, code })
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = '/login/';
+      } else {
+        alertBox.textContent = data.error || 'Verification failed';
+        alertBox.classList.remove('hidden');
+        alertBox.classList.add('error');
+      }
+    } catch (err) {
+      alertBox.textContent = 'An error occurred';
+      alertBox.classList.remove('hidden');
+      alertBox.classList.add('error');
+    }
+  });
+</script>
+{% endblock %}
