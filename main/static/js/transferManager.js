@@ -12,6 +12,7 @@ class TransferManager {
         this.maxConcurrentTransfers = 1;
         this.chunkSize = 1 * 1024 * 1024; // 1MB chunks
         this.currentView = 'all'; // all, uploads, downloads
+        this.pageReloadPending = false; // Track if page reload is pending
         
         this.init();
     }
@@ -110,6 +111,12 @@ class TransferManager {
      * Process the transfer queue
      */
     async processQueue() {
+        // Don't start new transfers if page reload is pending
+        if (this.pageReloadPending) {
+            console.log('Page reload pending, skipping queue processing');
+            return;
+        }
+
         const activeCount = Array.from(this.activeTransfers.values())
             .filter(t => t.status === 'active').length;
 
@@ -339,6 +346,9 @@ class TransferManager {
                         transfer.statusMessage = 'Upload completed successfully!';
                         this.updateUI();
                         
+                        // Set flag to prevent new transfers before reload
+                        this.pageReloadPending = true;
+                        
                         // Wait before reloading to show the new file
                         setTimeout(() => {
                             window.location.reload();
@@ -361,6 +371,9 @@ class TransferManager {
                         setTimeout(() => {
                             transfer.statusMessage = 'Upload processing completed';
                             this.updateUI();
+                            
+                            // Set flag to prevent new transfers before reload
+                            this.pageReloadPending = true;
                             
                             // Remove from modal after timeout
                             setTimeout(() => {
@@ -396,6 +409,9 @@ class TransferManager {
                         // Update status to show likely completion but KEEP visible
                         transfer.statusMessage = 'Upload likely completed (check file list)';
                         this.updateUI();
+                        
+                        // Set flag to prevent new transfers before reload
+                        this.pageReloadPending = true;
                         
                         // Only remove after extended time
                         setTimeout(() => {
@@ -441,6 +457,9 @@ class TransferManager {
             transfer.progress = 100;
             this.moveToCompleted(transfer);
 
+            // Set flag to prevent new transfers before reload
+            this.pageReloadPending = true;
+            
             // Refresh the page to show new file
             window.location.reload();
 
@@ -1182,6 +1201,14 @@ class TransferManager {
             return `<p class="text-xs text-orange-600 mt-1">${progress}% • Paused</p>`;
         }
 
+        if (transfer.status === 'queued') {
+            // Show special message if page reload is pending
+            if (this.pageReloadPending && transfer.type === 'download') {
+                return '<p class="text-xs text-blue-600 mt-1">Waiting for upload to complete...</p>';
+            }
+            return '<p class="text-xs text-gray-600 mt-1">Waiting...</p>';
+        }
+
         return '<p class="text-xs text-gray-600 mt-1">Waiting...</p>';
     }
 
@@ -1362,11 +1389,11 @@ class TransferManager {
                     <div class="flex items-start">
                         <i class="fas fa-info-circle mr-2 mt-0.5"></i>
                         <div class="flex-1">
-                            <p class="font-medium">Transfers Restored</p>
-                            <p class="text-sm">Restored ${count} paused transfer(s) from previous session. Open Transfer Manager to resume.</p>
-                            <button class="mt-2 text-xs bg-blue-200 hover:bg-blue-300 px-2 py-1 rounded" onclick="window.transferManager.showModal();">
-                                Open Transfer Manager
-                            </button>
+                            <p class="font-medium">Download started</p>
+                            <p class="text-sm">Your Download has started. Open Transfers to monitor.</p>
+                            // <button class="mt-2 text-xs bg-blue-200 hover:bg-blue-300 px-2 py-1 rounded" onclick="window.transferManager.showModal();">
+                            //     Open Transfer Manager
+                            // </button>
                         </div>
                         <button class="ml-2 text-blue-700 hover:text-blue-900" onclick="$(this).parent().parent().fadeOut()">
                             <i class="fas fa-times"></i>
@@ -1384,7 +1411,7 @@ class TransferManager {
         notification.fadeIn();
         setTimeout(() => {
             notification.fadeOut();
-        }, 15000);
+        }, 5000);
     }
 
     /**
@@ -1483,12 +1510,27 @@ class TransferManager {
             this.syncActiveUploadsWithServer();
         }, 60000);
     }
+
+    /**
+     * Process queue after page load (handles transfers that were waiting for reload)
+     */
+    processQueueAfterPageLoad() {
+        // Reset the page reload pending flag
+        this.pageReloadPending = false;
+        
+        // Small delay to ensure page is fully loaded
+        setTimeout(() => {
+            console.log('Processing queued transfers after page load');
+            this.processQueue();
+        }, 1000);
+    }
 }
 
 // Initialize global transfer manager
 window.transferManager = new TransferManager();
 
-// Start server sync on page load
+// Start server sync and process queue on page load
 $(document).ready(function() {
     window.transferManager.startServerSync();
+    window.transferManager.processQueueAfterPageLoad();
 });
