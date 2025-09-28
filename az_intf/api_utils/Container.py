@@ -166,6 +166,7 @@ class Container:
     def validate_blob_name(self, blob_name: str) -> dict:
         """
         Validate blob name against Azure Storage naming requirements
+        Auto-sanitizes invalid characters instead of rejecting them
         
         Returns:
             dict: {
@@ -174,7 +175,19 @@ class Container:
                 'errors': list
             }
         """
-        return validate_azure_blob_name(blob_name)
+        validation_result = validate_azure_blob_name(blob_name)
+        
+        # Instead of failing on invalid characters, auto-sanitize and allow upload
+        if not validation_result['is_valid'] and validation_result['sanitized_name']:
+            logger.log(severity['INFO'], f"AUTO-SANITIZED blob name: '{blob_name}' -> '{validation_result['sanitized_name']}'")
+            # Return as valid since we have a sanitized version
+            return {
+                'is_valid': True,
+                'sanitized_name': validation_result['sanitized_name'],
+                'errors': []
+            }
+        
+        return validation_result
 
     def validate_new_blob_addition(self, new_blob_size, blob_name):
         # First validate Azure blob naming requirements
@@ -200,7 +213,7 @@ class Container:
             logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(sanitized_name))
             return (False, "Blob name already exists. Please use a different file.")
         
-        return (True, "Success", sanitized_name)  # Return sanitized name for use    
+        return (True, "Success")  # Keep original 2-element return for backward compatibility    
 
     def recalculate_storage_usage(self):
         """Recalculate and update storage usage based on actual blob sizes in database"""
@@ -445,7 +458,12 @@ class Container:
             
             # Use sanitized name
             blob_name = name_validation['sanitized_name']
-            logger.log(severity['DEBUG'], f"Using sanitized blob name: {blob_name}")
+            
+            # Log if file name was changed during sanitization
+            if blob_name != file_name:
+                logger.log(severity['INFO'], f"File name sanitized: '{file_name}' -> '{blob_name}'")
+            else:
+                logger.log(severity['DEBUG'], f"Using blob name: {blob_name}")
             
             # Create blob client for Azure operations
             blob_client = self.__service_client.get_blob_client(

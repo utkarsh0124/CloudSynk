@@ -466,49 +466,97 @@ class ChunkedUploadAPIView(APIView):
         """Handle chunked file upload with resume support"""
         user = request.user
         
+        # Debug logging - log all request data
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD REQUEST: user={user.username}")
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD DATA: {list(request.data.keys())}")
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD FILES: {list(request.FILES.keys())}")
+        
+        # Log specific parameters
+        upload_id = request.data.get('upload_id')
+        chunk_index = request.data.get('chunk_index')
+        total_chunks = request.data.get('total_chunks')
+        file_name = request.data.get('file_name')
+        total_size = request.data.get('total_size')
+        chunk_data = request.FILES.get('chunk')
+        
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD PARAMS: upload_id={upload_id}, chunk_index={chunk_index}, total_chunks={total_chunks}, file_name={file_name}, total_size={total_size}")
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD CHUNK: {chunk_data.name if chunk_data else None}, size={chunk_data.size if chunk_data else None}")
+        
         try:
             user_info = UserInfo.objects.get(user=user)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Found user_info for {user.username}")
         except UserInfo.DoesNotExist:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: UserInfo not found for {user.username}")
             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get upload parameters
-        upload_id = request.data.get('upload_id')
-        chunk_index = int(request.data.get('chunk_index', 0))
-        total_chunks = int(request.data.get('total_chunks', 1))
-        file_name = request.data.get('file_name')
-        total_size = int(request.data.get('total_size', 0))
-        chunk_data = request.FILES.get('chunk')
+        # Validate required parameters
+        if not upload_id:
+            logger.log(severity['ERROR'], "CHUNKED UPLOAD: Missing upload_id")
+            return Response({'success': False, 'error': 'Missing upload_id parameter'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not file_name:
+            logger.log(severity['ERROR'], "CHUNKED UPLOAD: Missing file_name")
+            return Response({'success': False, 'error': 'Missing file_name parameter'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not chunk_data:
+            logger.log(severity['ERROR'], "CHUNKED UPLOAD: Missing chunk data")
+            return Response({'success': False, 'error': 'Missing chunk data'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Convert string parameters to integers
+        try:
+            chunk_index = int(chunk_index) if chunk_index is not None else 0
+            total_chunks = int(total_chunks) if total_chunks is not None else 1
+            total_size = int(total_size) if total_size is not None else 0
+        except (ValueError, TypeError) as e:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Parameter conversion error: {e}")
+            return Response({'success': False, 'error': f'Invalid parameter format: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Converted params - chunk_index={chunk_index}, total_chunks={total_chunks}, total_size={total_size}")
 
         if not all([upload_id, file_name, chunk_data]):
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Missing required parameters after validation")
             return Response({'success': False, 'error': 'Missing required parameters'}, status=status.HTTP_400_BAD_REQUEST)
 
         api_instance = az_api.get_container_instance(user_info.user_name)
         if not api_instance:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: API instance creation failed for {user_info.user_name}")
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Validate quota for the first chunk only (to avoid multiple validations for the same file)
         if chunk_index == 0:
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: First chunk, validating quota and blob name")
             # Validate against user's quota and file name uniqueness
             blob_validation = api_instance.validate_new_blob_addition(total_size, file_name)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Blob validation result: {blob_validation}")
             if not blob_validation[0]:
+                logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Blob validation failed: {blob_validation[1]}")
                 return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
             
             # Initialize streaming upload session for first chunk
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Initializing streaming upload session")
             init_result = api_instance.initialize_streaming_upload(file_name, upload_id, total_size)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Init result: {init_result}")
             if not init_result['success']:
+                logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Streaming upload init failed: {init_result['error']}")
                 return Response({'success': False, 'error': init_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Appending chunk {chunk_index}")
             # Stream chunk directly to Azure
             chunk_result = api_instance.append_chunk_to_blob(upload_id, chunk_data, chunk_index)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Chunk append result: {chunk_result}")
             if not chunk_result['success']:
+                logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Chunk append failed: {chunk_result['error']}")
                 return Response({'success': False, 'error': chunk_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             # Check if upload is complete
             if chunk_index == total_chunks - 1:
+                logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Final chunk, finalizing upload")
                 # Finalize streaming upload
                 finalize_result = api_instance.finalize_streaming_upload(upload_id, file_name)
+                logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Finalize result: {finalize_result}")
                 if finalize_result['success']:
+                    logger.log(severity['INFO'], f"CHUNKED UPLOAD: Upload completed successfully")
                     return Response({
                         'success': True, 
                         'completed': True,
@@ -518,8 +566,10 @@ class ChunkedUploadAPIView(APIView):
                         'message': 'Upload completed successfully'
                     }, status=status.HTTP_201_CREATED)
                 else:
+                    logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Finalization failed: {finalize_result['error']}")
                     return Response({'success': False, 'error': finalize_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Chunk {chunk_index} completed successfully")
             return Response({
                 'success': True,
                 'completed': False,
@@ -529,6 +579,7 @@ class ChunkedUploadAPIView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Streaming upload error: {str(e)}")
             return Response({'success': False, 'error': f'Streaming upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get(self, request):

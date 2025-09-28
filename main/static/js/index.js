@@ -211,9 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Use the new transfer manager for uploads
             if (window.transferManager) {
-                const transferId = window.transferManager.addUpload(f);
-                console.log(`📤 Added to transfer manager: ${f.name} (ID: ${transferId})`);
-                
+                const transferId = window.transferManager.addUpload(f);  
                 // Track upload activity
                 /* if (window.historyManager) {
                     window.historyManager.trackUpload(f.name, f.size, transferId);
@@ -355,7 +353,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Use the new transfer manager
         if (window.transferManager) {
             const transferId = window.transferManager.addDownload(blobId, blobName, blobSize);
-            console.log(`📥 Added to transfer manager: ${blobName} (ID: ${transferId})`);
             
             // Track download activity
             /* if (window.historyManager) {
@@ -378,13 +375,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     async function downloadFileWithResume(blobId, fileName, blobSize, downloadBtn) {
-        console.log('🔽 downloadFileWithResume started for:', fileName, 'Size:', blobSize, 'ID:', blobId);
         const downloadId = `download_${blobId}`;
         let resumeData = getResumeData(downloadId);
         
-        try {
-            console.log('🔍 Resume data check:', resumeData ? 'Found' : 'None');
-            
+        try {            
             // Add status text container next to button if it doesn't exist
             let statusContainer = downloadBtn.siblings('.download-status');
             if (statusContainer.length === 0) {
@@ -397,38 +391,27 @@ document.addEventListener('DOMContentLoaded', function() {
             
             let downloadedBytes = resumeData ? resumeData.downloadedBytes : 0;
             let chunks = resumeData ? resumeData.chunks : [];
-            
-            console.log('📊 Download state - Downloaded:', downloadedBytes, 'Total:', blobSize, 'Chunks:', chunks.length);
-            
+                        
             // If already completed
             if (downloadedBytes >= blobSize && chunks.length > 0) {
-                console.log('✅ File already completed, triggering completion');
                 downloadCompleted(chunks, fileName, downloadBtn, statusContainer);
                 return;
             }
             
             // For small files, use simple form submission
             if (blobSize < 5 * 1024 * 1024) { // Less than 5MB
-                console.log('📁 Small file detected, using simple download');
                 simpleDownload(blobId, downloadBtn, statusContainer);
                 return;
             }
-            
-            console.log('📦 Large file detected, using chunked download');
-            
+                        
             // Download remaining chunks for large files
             const chunkSize = 2 * 1024 * 1024; // 2MB chunks
             const totalChunks = Math.ceil(blobSize / chunkSize);
             const startChunk = Math.floor(downloadedBytes / chunkSize);
-            
-            console.log('🔢 Chunked download - Total chunks:', totalChunks, 'Start chunk:', startChunk);
-            
+                        
             for (let i = startChunk; i < totalChunks; i++) {
                 const start = i * chunkSize;
-                const end = Math.min(start + chunkSize - 1, blobSize - 1);
-                
-                console.log(`📦 Downloading chunk ${i + 1}/${totalChunks} (${start}-${end})`);
-                
+                const end = Math.min(start + chunkSize - 1, blobSize - 1);    
                 try {
                     const chunk = await downloadChunk(blobId, start, end);
                     chunks[i] = chunk;
@@ -454,28 +437,22 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Download completed - update progress to 100% and mark as completed
-            console.log('🎯 Download completed in regular flow for:', fileName);
             updateDownloadProgress(blobId, 100);
             updateDownloadStatus(blobId, 'completed');
-            console.log('📞 Calling downloadCompleted function');
             downloadCompleted(chunks, fileName, downloadBtn, statusContainer);
             
             // Check if this is a queue download and notify the queue system
             if (currentDownload && currentDownload.id === blobId) {
-                console.log('🎯 This is a queue download, updating queue status');
                 currentDownload.status = 'completed';
-                console.log('📝 Updated currentDownload.status to:', currentDownload.status);
                 updateDownloadsModal();
                 
                 // Clear any timeout
                 if (currentDownload.timeoutId) {
                     clearTimeout(currentDownload.timeoutId);
-                    console.log('⏰ Cleared download timeout');
                 }
                 
                 // Resolve the Promise for the queue system
                 if (currentDownload.resolvePromise) {
-                    console.log('✅ Resolving queue Promise');
                     currentDownload.resolvePromise();
                     // Clear the promise functions to prevent multiple calls
                     currentDownload.resolvePromise = null;
@@ -503,17 +480,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function simpleDownload(blobId, downloadBtn, statusContainer) {
-        console.log('📄 simpleDownload called for ID:', blobId);
         const csrftoken = getCsrfToken();
-        console.log('🔑 CSRF token:', csrftoken ? 'Found' : 'Missing');
         
         // Create a form and submit it to trigger file download
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = `/downloadFile/${blobId}/`;
         form.style.display = 'none';
-        
-        console.log('📋 Form created with action:', form.action);
         
         // Add CSRF token
         if (csrftoken) {
@@ -522,7 +495,6 @@ document.addEventListener('DOMContentLoaded', function() {
             csrfInput.name = 'csrfmiddlewaretoken';
             csrfInput.value = csrftoken;
             form.appendChild(csrfInput);
-            console.log('✅ CSRF token added to form');
         }
         
         document.body.appendChild(form);
@@ -530,20 +502,14 @@ document.addEventListener('DOMContentLoaded', function() {
         // Show downloading state
         statusContainer.text('Downloading...').removeClass('text-green-600 text-red-600').addClass('text-blue-600');
         
-        console.log('🚀 Submitting form for simple download');
-        
         // Submit the form to trigger download
         form.submit();
-        
-        console.log('✅ Form submitted, cleaning up');
-        
         // Clean up and reset button state
         document.body.removeChild(form);
         
         // For small files, we can't detect completion directly, so simulate it
         // Since the form submission triggers immediate download, we'll assume success
         setTimeout(() => {
-            console.log('🎯 Simulating completion for small file download');
             statusContainer.text('Downloaded!').removeClass('text-blue-600 text-red-600').addClass('text-green-600');
             
             // Trigger the completion callback for queue system
@@ -552,15 +518,11 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Get the filename from currentDownload if it exists
             const fileName = currentDownload ? currentDownload.name : 'download';
-            
-            console.log('📞 Calling downloadCompleted for small file');
             downloadCompleted([dummyBlob], fileName, downloadBtn, statusContainer);
         }, 1000); // Give browser time to start the download
     }
 
     async function downloadChunk(blobId, start, end) {
-        console.log(`🔽 downloadChunk called - ID: ${blobId}, Range: ${start}-${end}`);
-        
         const response = await fetch(`/downloadFile/${blobId}/`, {
             method: 'POST',
             headers: {
@@ -571,16 +533,12 @@ document.addEventListener('DOMContentLoaded', function() {
             credentials: 'same-origin'
         });
         
-        console.log(`📡 Chunk response - Status: ${response.status}, OK: ${response.ok}`);
-        
         if (!response.ok) {
             console.error(`❌ Chunk download failed - HTTP ${response.status}`);
             throw new Error(`HTTP ${response.status}`);
         }
         
         const arrayBuffer = await response.arrayBuffer();
-        console.log(`✅ Chunk downloaded - Size: ${arrayBuffer.byteLength} bytes`);
-        
         return arrayBuffer;
     }
 
@@ -661,13 +619,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function triggerDownload(blob, filename) {
         try {
-            console.log('🔽 Triggering download for:', filename, 'Size:', blob.size);
-            
-            // Check if this might be a large file that triggers save dialog
-            if (blob.size > 50 * 1024 * 1024) { // 50MB
-                console.log('📁 Large file detected, browser may ask for save location');
-            }
-            
             // Method 1: Direct download with forced attributes
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -692,9 +643,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Dispatch the event immediately while we're in user gesture context
             a.dispatchEvent(mouseEvent);
-            
-            console.log('🔽 Download triggered - if browser asks for location, check browser settings');
-            console.log('💡 To avoid save dialogs: Browser Settings > Downloads > Turn off "Ask where to save each file"');
             
             // Clean up
             setTimeout(() => {
@@ -772,7 +720,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         $('#menu-toggle').on('click', function(e) {
-            console.log('Menu toggle clicked - using smooth animation');
             e.stopPropagation();
             
             if ($dropdown.is(':visible') && $dropdown.css('opacity') == '1') {
@@ -952,9 +899,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var quotaFormatted = formatFileSize(quota);
             
             // Update sidebar storage display
-            $('.flex.flex-col.mt-2.ml-1.mr-2 .font-medium.text-gray-800').text(usedFormatted + ' / ' + quotaFormatted);
-            
-            console.log('Storage progress updated:', percentClamped.toFixed(2) + '%');
+            $('.flex.flex-col.mt-2.ml-1.mr-2 .font-medium.text-gray-800').text(usedFormatted + ' / ' + quotaFormatted);    
         }
     }
 

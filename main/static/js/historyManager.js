@@ -43,7 +43,6 @@
 //         this.saveHistoryToStorage();
 //         this.updateUI();
 
-//         console.log(`📝 Activity logged: ${type} - ${fileName}`);
 //     }
 
 //     /**
