@@ -655,6 +655,7 @@ class ChunkedUploadAPIView(APIView):
                 logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Blob validation failed: {blob_validation[1]}")
                 return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
             
+            file_name = blob_validation[2]
             # Initialize streaming upload session for first chunk
             logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Initializing streaming upload session")
             init_result = api_instance.initialize_streaming_upload(file_name, upload_id, total_size)

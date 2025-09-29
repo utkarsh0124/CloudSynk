@@ -212,8 +212,8 @@ class Container:
         if self.__blob_name_exists(sanitized_name):
             logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(sanitized_name))
             return (False, "Blob name already exists. Please use a different file.")
-        
-        return (True, "Success")  # Keep original 2-element return for backward compatibility    
+
+        return (True, "Success") 
 
     def recalculate_storage_usage(self):
         """Recalculate and update storage usage based on actual blob sizes in database"""
