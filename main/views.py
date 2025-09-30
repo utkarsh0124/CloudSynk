@@ -166,13 +166,7 @@ class OTPVerifyAPIView(APIView):
         )
         user.is_active = True
         user.save()
-        # Create UserInfo record
-        UserInfo.objects.create(
-            user=user,
-            user_name=pending.username,
-            email_id=pending.email,
-            subscription_type=DEFAULT_SUBSCRIPTION_AT_INIT
-        )
+
         # Initialize container
         created = az_api.init_container(user, user.username, app_utils.assign_container(user.username), user.email)
         if not created:
@@ -404,6 +398,8 @@ class HomeAPIView(APIView):
         # Get the UserInfo model instance for avatar URL calculation
         user_info_instance = UserInfo.objects.get(user=user)
         avatar_url = get_avatar_url(user_info_instance)
+        if avatar_url is None:
+            logger.log(severity['ERROR'], f"Failed to get avatar URL for user {user.username}, using default placeholder")
         
         # Add avatar URL to the context object
         user_info_obj['avatar_url'] = avatar_url
@@ -655,7 +651,6 @@ class ChunkedUploadAPIView(APIView):
                 logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Blob validation failed: {blob_validation[1]}")
                 return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
             
-            file_name = blob_validation[2]
             # Initialize streaming upload session for first chunk
             logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Initializing streaming upload session")
             init_result = api_instance.initialize_streaming_upload(file_name, upload_id, total_size)

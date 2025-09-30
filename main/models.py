@@ -17,7 +17,7 @@ class UserInfo(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True) # primary key
     user_name = models.CharField(max_length=100, null=False, blank=False)
     subscription_type = models.CharField(max_length=MAX_CHOICES_LENGTH, choices=SUBSCRIPTION_CHOICES, default="STARTER")
-    container_name = models.CharField(max_length=250, default="None")
+    container_name = models.CharField(max_length=250, null=False, blank=False, unique=True) # unique container name
     storage_quota_bytes = models.BigIntegerField(null=False, default=0)  # 0 GB default quota
     storage_used_bytes = models.BigIntegerField(null=False, default=0)
     dob = models.DateField(null=True, blank=True)

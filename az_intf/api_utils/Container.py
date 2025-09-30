@@ -11,6 +11,7 @@ from storage_webapp import logger, severity
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 from .utils import AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_ENDPOINT_SUFFIX
 from .utils import validate_azure_blob_name, sanitize_azure_blob_name
+from main.utils import generate_and_store_avatar
 
 
 class Container:
@@ -23,10 +24,10 @@ class Container:
                                 )
         self.__container_client = None
         if self.__user_obj.container_name is None or self.__user_obj.container_name=="":
-            logger.log(severity['INFO'], "CONTAINER DOES NOT EXIST")
+            logger.log(severity['ERROR'], "CONTAINER DOES NOT EXIST")
             logger.log(severity['ERROR'], "FAILED TO INITIALIZE CONTAINER CLIENT")
             # Object not created
-            return
+            assert False
         self.__container_client = self.__service_client.get_container_client(self.__user_obj.container_name)
 
         # dictionary of key=blob name, value=blob object
@@ -73,8 +74,9 @@ class Container:
             logger.log(severity['DEBUG'], "CONTAINER CREATE SUCCESS : User Name : {}, Container Name : {}, Email ID : {}".format(username, container_name, email_id))
             
             # Generate and store avatar
-            from main.utils import generate_and_store_avatar
             avatar_url = generate_and_store_avatar(username)
+            if avatar_url is None:
+                logger.log(severity['ERROR'], f"Failed to generate/store avatar for user {username}, using default placeholder")
             
             # add container to db
             user_info, created = UserInfo.objects.get_or_create(
@@ -294,76 +296,76 @@ class Container:
             logger.log(severity['ERROR'], "GET UPLOAD STATUS EXCEPTION : {}".format(error))
             return None
 
-    def blob_create(self,blob_name:str, blob_size_bytes:int, blob_type:str="file", blob_file=None):
-        # add debug log using format print
-        logger.log(severity['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}".format(blob_name, blob_size_bytes, blob_type))
-        assigned_blob_id = None
-        try:
-            # Validate Azure blob naming requirements
-            name_validation = self.validate_blob_name(blob_name)
-            if not name_validation['is_valid']:
-                error_msg = f"Invalid blob name: {'; '.join(name_validation['errors'])}"
-                logger.log(severity['WARNING'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
-                return (False, assigned_blob_id)
+    # def blob_create(self,blob_name:str, blob_size_bytes:int, blob_type:str="file", blob_file=None):
+    #     # add debug log using format print
+    #     logger.log(severity['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}".format(blob_name, blob_size_bytes, blob_type))
+    #     assigned_blob_id = None
+    #     try:
+    #         # Validate Azure blob naming requirements
+    #         name_validation = self.validate_blob_name(blob_name)
+    #         if not name_validation['is_valid']:
+    #             error_msg = f"Invalid blob name: {'; '.join(name_validation['errors'])}"
+    #             logger.log(severity['WARNING'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+    #             return (False, assigned_blob_id)
             
-            # Use sanitized name
-            sanitized_blob_name = name_validation['sanitized_name']
+    #         # Use sanitized name
+    #         sanitized_blob_name = name_validation['sanitized_name']
             
-            if self.__blob_name_exists(sanitized_blob_name):
-                logger.log(severity['INFO'], "BLOB ALREADY EXISTS")
-                return (False, assigned_blob_id)
-            # add debug log
-            logger.log(severity['DEBUG'], "BLOB CREATE : Checking quota for user : {}, Used : {}, Quota : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes,
-                       self.__user_obj.storage_quota_bytes))
+    #         if self.__blob_name_exists(sanitized_blob_name):
+    #             logger.log(severity['INFO'], "BLOB ALREADY EXISTS")
+    #             return (False, assigned_blob_id)
+    #         # add debug log
+    #         logger.log(severity['DEBUG'], "BLOB CREATE : Checking quota for user : {}, Used : {}, Quota : {}".format(self.__user_name,
+    #                    self.__user_obj.storage_used_bytes,
+    #                    self.__user_obj.storage_quota_bytes))
 
-            # check against the user's quota
-            if self.__user_obj.storage_used_bytes + blob_size_bytes >= self.__user_obj.storage_quota_bytes:
-                logger.log(severity['INFO'], "STORAGE EXCEEDED")
-                return (False, assigned_blob_id)
+    #         # check against the user's quota
+    #         if self.__user_obj.storage_used_bytes + blob_size_bytes >= self.__user_obj.storage_quota_bytes:
+    #             logger.log(severity['INFO'], "STORAGE EXCEEDED")
+    #             return (False, assigned_blob_id)
 
-            # add debug log with format print
-            logger.log(severity['DEBUG'], "BLOB CREATE : Quota OK for user : {}, Used : {}, Quota : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes,
-                       self.__user_obj.storage_quota_bytes))
+    #         # add debug log with format print
+    #         logger.log(severity['DEBUG'], "BLOB CREATE : Quota OK for user : {}, Used : {}, Quota : {}".format(self.__user_name,
+    #                    self.__user_obj.storage_used_bytes,
+    #                    self.__user_obj.storage_quota_bytes))
             
-            # update and save user's storage usage
-            self.__user_obj.storage_used_bytes += blob_size_bytes
-            self.__user_obj.save()
+    #         # update and save user's storage usage
+    #         self.__user_obj.storage_used_bytes += blob_size_bytes
+    #         self.__user_obj.save()
 
-            # server side AZURE API call to create a blob for a user 
-            #---------------------------------------------------------------------------
-            if self.__container_client is not None:
-                if not blob_file:
-                    logger.log(severity['INFO'], "BLOB CREATE : No file provided, creating empty blob")
-                    self.__user_obj.delete()
-                    return (False, None)
-                else:
-                    logger.log(severity['INFO'], "BLOB CREATE : Uploading provided file as blob : {}".format(sanitized_blob_name))
-                    blob_client = self.__container_client.get_blob_client(sanitized_blob_name)
+    #         # server side AZURE API call to create a blob for a user 
+    #         #---------------------------------------------------------------------------
+    #         if self.__container_client is not None:
+    #             if not blob_file:
+    #                 logger.log(severity['INFO'], "BLOB CREATE : No file provided, creating empty blob")
+    #                 self.__user_obj.delete()
+    #                 return (False, None)
+    #             else:
+    #                 logger.log(severity['INFO'], "BLOB CREATE : Uploading provided file as blob : {}".format(sanitized_blob_name))
+    #                 blob_client = self.__container_client.get_blob_client(sanitized_blob_name)
 
-                    file_like = getattr(blob_file, "file", blob_file)
-                    blob_client.upload_blob(file_like, overwrite=True)
-                logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(sanitized_blob_name, self.__user_obj.container_name))
-            else:
-                logger.log(severity['ERROR'], "BLOB CREATE FAILED : CONTAINER CLIENT NOT INITIALIZED")
-                self.__user_obj.delete()
-                return (False, assigned_blob_id)
-            #---------------------------------------------------------------------------
+    #                 file_like = getattr(blob_file, "file", blob_file)
+    #                 blob_client.upload_blob(file_like, overwrite=True)
+    #             logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(sanitized_blob_name, self.__user_obj.container_name))
+    #         else:
+    #             logger.log(severity['ERROR'], "BLOB CREATE FAILED : CONTAINER CLIENT NOT INITIALIZED")
+    #             self.__user_obj.delete()
+    #             return (False, assigned_blob_id)
+    #         #---------------------------------------------------------------------------
 
-            #add debug log
-            logger.log(severity['DEBUG'], "BLOB CREATE : Updated storage used for user : {}, New Used : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes))
+    #         #add debug log
+    #         logger.log(severity['DEBUG'], "BLOB CREATE : Updated storage used for user : {}, New Used : {}".format(self.__user_name,
+    #                    self.__user_obj.storage_used_bytes))
 
-            result, assigned_blob_id = self.__add_blob_to_db(sanitized_blob_name, blob_size_bytes, blob_type)
-            if not result:
-                logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION")
-                self.__user_obj.delete()
-                return (False, assigned_blob_id)
-        except Exception as error:
-            logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION : {}".format(error))
-            return (False, assigned_blob_id)
-        return (True, assigned_blob_id)
+    #         result, assigned_blob_id = self.__add_blob_to_db(sanitized_blob_name, blob_size_bytes, blob_type)
+    #         if not result:
+    #             logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION")
+    #             self.__user_obj.delete()
+    #             return (False, assigned_blob_id)
+    #     except Exception as error:
+    #         logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION : {}".format(error))
+    #         return (False, assigned_blob_id)
+    #     return (True, assigned_blob_id)
 
     def blob_delete(self, blob_id):
         try:
@@ -462,6 +464,7 @@ class Container:
             # Log if file name was changed during sanitization
             if blob_name != file_name:
                 logger.log(severity['INFO'], f"File name sanitized: '{file_name}' -> '{blob_name}'")
+                file_name=blob_name
             else:
                 logger.log(severity['DEBUG'], f"Using blob name: {blob_name}")
             
@@ -482,7 +485,7 @@ class Container:
                 'start_time': time.time()
             }
             
-            logger.log(severity['INFO'], f"STREAMING UPLOAD: Initialized session {upload_id} for {file_name}")
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Initialized session Upload ID:{upload_id} for BlobName:{blob_name}")
             return {'success': True, 'blob_name': blob_name}
             
         except Exception as e:
@@ -508,11 +511,16 @@ class Container:
             
             logger.log(severity['DEBUG'], f"STREAMING UPLOAD: Staging block {block_id} for {upload_id}, size={chunk_size}")
             
+            print("Container:", blob_client.container_name)
+            print("Blob:", blob_client.blob_name)
+            print("URL:", blob_client.url)
+
             # Stage block directly to Azure
             blob_client.stage_block(
                 block_id=block_id,
                 data=chunk_bytes
             )
+            logger.log(severity['DEBUG'], f"Staged block {block_id} for {upload_id}, size={chunk_size}")
             
             # Track the staged block
             upload_session['uploaded_blocks'].append(block_id)

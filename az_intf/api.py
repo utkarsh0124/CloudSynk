@@ -7,14 +7,14 @@ CONTAINER_INSTANCE = None
 def init_container(user_obj, username:str, container_name:str, email_id):
     logger.log(severity['DEBUG'], "INIT CONTAINER : {}".format(username))
     try:
-        Container.container_create(user_obj,
+        ret = Container.container_create(user_obj,
                         username=username,
                         container_name=container_name,
                         email_id=email_id)
     except Exception as error:
         logger.log(severity['ERROR'], "INIT CONTAINER EXCEPTION : {}".format(error))
         return False
-    return True
+    return ret
 
 def get_container_instance(username:str):
     logger.log(severity['DEBUG'], "GET CONTAINER INSTANCE : {}".format(username))
