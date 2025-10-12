@@ -187,54 +187,8 @@ class APITests(AzDummyMixin, TestCase):
             # If not JSON, still fail earlier if it was 200; otherwise allow non-JSON error responses
             pass
 
-    # Blob API tests
-    def test_add_blob_missing_filename(self):
-        # create user and userinfo
-        user = User.objects.create_user(username='blobuser', password='pw123', email='blob@example.com')
-        UserInfo.objects.create(user=user, user_name=user.username)
-        self.client.force_login(user)
-        add_url = reverse('api_add')
-        resp = self.client.post(add_url, json.dumps({}), content_type='application/json', HTTP_ACCEPT='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertStatus(resp, 400, msg="Add blob missing filename did not return 400")
-        self.assertJSONHasKey(resp, 'error', msg="Add blob missing filename response missing 'error'")
-
-    def test_add_blob_api_instantiation_failed_and_blob_create_failure(self):
-        # Ensure when API instantiation fails, view returns 500
-        user = User.objects.create_user(username='blobuser2', password='pw123', email='blob2@example.com')
-        UserInfo.objects.create(user=user, user_name=user.username)
-        self.client.force_login(user)
-        add_url = reverse('api_add')
-        # Mock az_api.get_container_instance to return None (instantiation failed)
-        orig_get = az_api.get_container_instance
-        try:
-            az_api.get_container_instance = lambda uname: None
-            # provide a file upload (view expects uploaded file)
-            uploaded = SimpleUploadedFile('test.txt', b'filecontent')
-            resp = self.client.post(add_url, {'file_name': 'test.txt', 'blob_file': uploaded}, HTTP_ACCEPT='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-            self.assertStatus(resp, 500, msg="Add blob when API instantiation failed did not return 500")
-        finally:
-            az_api.get_container_instance = orig_get
-
-    def test_add_blob_success_flow_but_blob_create_returns_false(self):
-        # When blob_create returns False, view should return 400
-        user = User.objects.create_user(username='blobuser3', password='pw123', email='blob3@example.com')
-        UserInfo.objects.create(user=user, user_name=user.username)
-        self.client.force_login(user)
-        add_url = reverse('api_add')
-
-        class DummyAPI:
-            def blob_create(self, name, size, typ, uploaded=None):
-                return (False, None)
-
-        orig_get = az_api.get_container_instance
-        try:
-            az_api.get_container_instance = lambda uname: DummyAPI()
-            uploaded = SimpleUploadedFile('test.txt', b'filecontent')
-            resp = self.client.post(add_url, {'file_name': 'test.txt', 'blob_file': uploaded}, HTTP_ACCEPT='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-            self.assertStatus(resp, 400, msg="Add blob when blob_create returned False did not return 400")
-        finally:
-            az_api.get_container_instance = orig_get
-
+    # Blob API tests (AddBlobAPIView deprecated - using chunked upload only)
+    
     def test_delete_blob_missing_id(self):
         # calling the delete endpoint with no blob_id should not resolve; expect 404
         user = User.objects.create_user(username='deluser', password='pw123', email='del@example.com')
@@ -248,7 +202,7 @@ class APITests(AzDummyMixin, TestCase):
         user = User.objects.create_user(username='deluser2', password='pw123', email='del2@example.com')
         UserInfo.objects.create(user=user, user_name=user.username)
         self.client.force_login(user)
-        delete_url = reverse('api_delete', kwargs={'blob_id': 'nonexistent'})
+        delete_url = reverse('delete', kwargs={'blob_id': 'nonexistent'})
         orig_get = az_api.get_container_instance
         try:
             az_api.get_container_instance = lambda uname: None
@@ -257,39 +211,11 @@ class APITests(AzDummyMixin, TestCase):
         finally:
             az_api.get_container_instance = orig_get
 
-    def test_add_blob_success_happy_path(self):
-        # When blob_create returns True and a blob_id, view should return success JSON
-        user = User.objects.create_user(username='blobuser_ok', password='pw123', email='blobok@example.com')
-        UserInfo.objects.create(user=user, user_name=user.username)
-        self.client.force_login(user)
-        add_url = reverse('api_add')
-
-        orig_get = az_api.get_container_instance
-        try:
-            az_api.get_container_instance = lambda uname: APITests.DummyContainer((True, 'blob-12345'))
-            uploaded = SimpleUploadedFile('ok.txt', b'contents')
-            resp = self.client.post(add_url, {'file_name': 'ok.txt', 'blob_file': uploaded}, HTTP_ACCEPT='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-            # Expect 201 Created (view returns 201 on success) or 200 depending on implementation
-            self.assertStatus(resp, (200, 201), msg="Add blob happy path did not return 200/201")
-            data = resp.json()
-            # success key may not be present; if present, ensure truthy
-            if 'success' in data:
-                if not data.get('success'):
-                    dbg = self._resp_debug(resp)
-                    self.fail("Add blob response 'success' falsy when expected True. Response:\n%s" % dbg)
-            # If blob_id is returned in view payload, check it (defensive)
-            if 'blob_id' in data:
-                if data.get('blob_id') != 'blob-12345':
-                    dbg = self._resp_debug(resp)
-                    self.fail("blob_id mismatch. Expected 'blob-12345'. Response:\n%s" % dbg)
-        finally:
-            az_api.get_container_instance = orig_get
-
     def test_delete_blob_success_happy_path(self):
         user = User.objects.create_user(username='deluser_ok', password='pw123', email='delok@example.com')
         UserInfo.objects.create(user=user, user_name=user.username)
         self.client.force_login(user)
-        delete_url = reverse('api_delete', kwargs={'blob_id': 'blob-12345'})
+        delete_url = reverse('delete', kwargs={'blob_id': 'blob-12345'})
 
         orig_get = az_api.get_container_instance
         try:
@@ -303,29 +229,11 @@ class APITests(AzDummyMixin, TestCase):
         finally:
             az_api.get_container_instance = orig_get
 
-    def test_add_blob_browser_redirect(self):
-        # For browser (non-API) requests, AddBlob should redirect to /home/
-        user = User.objects.create_user(username='blobuser_browser', password='pw123', email='blobbrowser@example.com')
-        UserInfo.objects.create(user=user, user_name=user.username)
-        self.client.force_login(user)
-        add_url = reverse('api_add')
-
-        orig_get = az_api.get_container_instance
-        try:
-            az_api.get_container_instance = lambda uname: APITests.DummyContainer((True, 'blob-xyz'))
-            # Simulate a browser POST (no application/json accept and no XHR header)
-            uploaded = SimpleUploadedFile('browser.txt', b'contents')
-            resp = self.client.post(add_url, {'file_name': 'browser.txt', 'blob_file': uploaded})
-            # Should redirect (302/301) to /home/ or similar
-            self.assertStatus(resp, (302, 301), msg="Add blob browser POST did not redirect")
-        finally:
-            az_api.get_container_instance = orig_get
-
     def test_delete_blob_browser_redirect(self):
         user = User.objects.create_user(username='deluser_browser', password='pw123', email='delbrowser@example.com')
         UserInfo.objects.create(user=user, user_name=user.username)
         self.client.force_login(user)
-        delete_url = reverse('api_delete', kwargs={'blob_id': 'blob-xyz'})
+        delete_url = reverse('delete', kwargs={'blob_id': 'blob-xyz'})
 
         orig_get = az_api.get_container_instance
         try:

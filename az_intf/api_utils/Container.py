@@ -1,5 +1,6 @@
 import time
 import base64
+import re
 
 # from django.contrib.auth.models import User
 from azure.storage.blob import ContainerClient, BlobServiceClient
@@ -9,6 +10,8 @@ from main.subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from storage_webapp import logger, severity
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 from .utils import AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_ENDPOINT_SUFFIX
+from .utils import validate_azure_blob_name, sanitize_azure_blob_name
+from main.utils import generate_and_store_avatar
 
 
 class Container:
@@ -21,14 +24,18 @@ class Container:
                                 )
         self.__container_client = None
         if self.__user_obj.container_name is None or self.__user_obj.container_name=="":
-            logger.log(severity['INFO'], "CONTAINER DOES NOT EXIST")
+            logger.log(severity['ERROR'], "CONTAINER DOES NOT EXIST")
             logger.log(severity['ERROR'], "FAILED TO INITIALIZE CONTAINER CLIENT")
             # Object not created
-            return
+            assert False
         self.__container_client = self.__service_client.get_container_client(self.__user_obj.container_name)
 
         # dictionary of key=blob name, value=blob object
         self.__blob_obj_dict = {blob_obj.blob_id: blob_obj for blob_obj in Blob.objects.filter(user_id=self.__user_obj.user_id)}
+        
+        # Track ongoing streaming uploads - Phase 1 optimization
+        self.__active_uploads = {}
+        
         # add debug log 
         logger.log(severity['DEBUG'], "CONTAINER INIT : User Name : {}, Container Name : {}, Blob Count : {}".format(username, self.__user_obj.container_name, len(self.__blob_obj_dict)))
 
@@ -66,6 +73,11 @@ class Container:
                 return True
             logger.log(severity['DEBUG'], "CONTAINER CREATE SUCCESS : User Name : {}, Container Name : {}, Email ID : {}".format(username, container_name, email_id))
             
+            # Generate and store avatar
+            avatar_url = generate_and_store_avatar(username)
+            if avatar_url is None:
+                logger.log(severity['ERROR'], f"Failed to generate/store avatar for user {username}, using default placeholder")
+            
             # add container to db
             user_info, created = UserInfo.objects.get_or_create(
                 user=user_obj,
@@ -76,7 +88,8 @@ class Container:
                     'storage_quota_bytes': dict(SUBSCRIPTION_VALUES)[DEFAULT_SUBSCRIPTION_AT_INIT],
                     'storage_used_bytes': 0,
                     'dob': None,
-                    'email_id': email_id
+                    'email_id': email_id,
+                    'avatar_url': avatar_url
                 }
             )
             if not created:
@@ -152,7 +165,43 @@ class Container:
             delete_success = False
         return delete_success
 
+    def validate_blob_name(self, blob_name: str) -> dict:
+        """
+        Validate blob name against Azure Storage naming requirements
+        Auto-sanitizes invalid characters instead of rejecting them
+        
+        Returns:
+            dict: {
+                'is_valid': bool,
+                'sanitized_name': str,
+                'errors': list
+            }
+        """
+        validation_result = validate_azure_blob_name(blob_name)
+        
+        # Instead of failing on invalid characters, auto-sanitize and allow upload
+        if not validation_result['is_valid'] and validation_result['sanitized_name']:
+            logger.log(severity['INFO'], f"AUTO-SANITIZED blob name: '{blob_name}' -> '{validation_result['sanitized_name']}'")
+            # Return as valid since we have a sanitized version
+            return {
+                'is_valid': True,
+                'sanitized_name': validation_result['sanitized_name'],
+                'errors': []
+            }
+        
+        return validation_result
+
     def validate_new_blob_addition(self, new_blob_size, blob_name):
+        # First validate Azure blob naming requirements
+        name_validation = self.validate_blob_name(blob_name)
+        if not name_validation['is_valid']:
+            error_msg = f"Invalid blob name: {'; '.join(name_validation['errors'])}"
+            logger.log(severity['DEBUG'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+            return (False, error_msg)
+        
+        # Use sanitized name for further checks
+        sanitized_name = name_validation['sanitized_name']
+        
         # validate against user's quota
         if self.__user_obj.storage_used_bytes + new_blob_size > self.__user_obj.storage_quota_bytes:
             logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : User Name : {}, Used : {}, Quota : {}, New Blob Size : {}".format(self.__user_name,
@@ -160,11 +209,13 @@ class Container:
                        self.__user_obj.storage_quota_bytes,
                        new_blob_size))
             return (False, "Storage quota exceeded. Please delete some files before uploading new ones or Upgrade your Subscription")
-        # validate blob name uniqueness
-        if self.__blob_name_exists(blob_name):
-            logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(blob_name))
+        
+        # validate blob name uniqueness (using sanitized name)
+        if self.__blob_name_exists(sanitized_name):
+            logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : Blob Name Already Exists : {}".format(sanitized_name))
             return (False, "Blob name already exists. Please use a different file.")
-        return (True, "Success")    
+
+        return (True, "Success") 
 
     def recalculate_storage_usage(self):
         """Recalculate and update storage usage based on actual blob sizes in database"""
@@ -213,206 +264,6 @@ class Container:
             for b in queryset
         ]
 
-    def get_upload_blob_sas_url(self, blob_id, expiry_hours=1):
-        try:
-            if self.__blob_id_exists(blob_id):
-                logger.log(severity['INFO'], "BLOB ALREADY EXISTS")
-                return None
-            container_name = self.__user_obj.container_name
-            blob_name = self.__blob_obj_dict[blob_id].blob_name
-            sas_url = app_utils.get_blob_sas_url(
-                container_name=container_name,
-                blob_name=blob_name,
-                permission="w",
-                expiry_hours=expiry_hours
-            )
-            if sas_url is None:
-                logger.log(severity['ERROR'], "GET BLOB SAS URL FAILED")
-                return None
-            logger.log(severity['INFO'], "GET BLOB SAS URL SUCCESS")
-            return sas_url
-        except Exception as error:
-            logger.log(severity['ERROR'], "GET BLOB SAS URL EXCEPTION : {}".format(error))
-        return None
-
-    # def get_download_blob_sas_url(self, blob_id, expiry_hours=1):
-    #     try:
-    #         if not self.__blob_id_exists(blob_id):
-    #             logger.log(severity['ERROR'], "BLOB DOES NOT EXIST FOR DOWNLOAD")
-    #             return None
-    #         container_name = self.__user_obj.container_name
-    #         blob_name = self.__blob_obj_dict[blob_id].blob_name
-    #         sas_url = app_utils.get_blob_sas_url(
-    #             container_name=container_name,
-    #             blob_name=blob_name,
-    #             permission="r",
-    #             expiry_hours=expiry_hours
-    #         )
-    #         if sas_url is None:
-    #             logger.log(severity['ERROR'], "GET DOWNLOAD BLOB SAS URL FAILED")
-    #             return None
-    #         logger.log(severity['INFO'], "GET DOWNLOAD BLOB SAS URL SUCCESS")
-    #         return sas_url
-    #     except Exception as error:
-    #         logger.log(severity['ERROR'], "GET DOWNLOAD BLOB SAS URL EXCEPTION : {}".format(error))
-    #     return None
-
-    # def get_blob_info(self, blob_id):
-    #     """Get blob information by blob_id"""
-    #     try:
-    #         if not self.__blob_id_exists(blob_id):
-    #             logger.log(severity['ERROR'], "BLOB DOES NOT EXIST")
-    #             return None
-    #         blob_obj = self.__blob_obj_dict[blob_id]
-    #         return {
-    #             'blob_id': blob_obj.blob_id,
-    #             'blob_name': blob_obj.blob_name,
-    #             'blob_size': blob_obj.blob_size,
-    #             'blob_type': blob_obj.blob_type,
-    #             'creation_time': blob_obj.creation_time,
-    #             'last_modification_time': blob_obj.last_modification_time
-    #         }
-    #     except Exception as error:
-    #         logger.log(severity['ERROR'], "GET BLOB INFO EXCEPTION : {}".format(error))
-    #     return None
-
-    def get_blob_stream(self, blob_id):
-        """Get blob stream for direct download using service client"""
-        try:
-            if not self.__blob_id_exists(blob_id):
-                logger.log(severity['ERROR'], "BLOB DOES NOT EXIST FOR DOWNLOAD")
-                return None
-                
-            if self.__container_client is None:
-                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
-                return None
-                
-            blob_name = self.__blob_obj_dict[blob_id].blob_name
-            blob_client = self.__container_client.get_blob_client(blob_name)
-            
-            # Get the blob download stream
-            download_stream = blob_client.download_blob()
-            
-            logger.log(severity['INFO'], "GET BLOB STREAM SUCCESS : Blob ID : {}, Blob Name : {}".format(blob_id, blob_name))
-            return download_stream
-            
-        except Exception as error:
-            logger.log(severity['ERROR'], "GET BLOB STREAM EXCEPTION : {}".format(error))
-            return None
-
-    def get_blob_stream_range(self, blob_id, start_byte=0, end_byte=None):
-        """Get blob stream with range support for resumable downloads"""
-        try:
-            if not self.__blob_id_exists(blob_id):
-                logger.log(severity['ERROR'], "BLOB DOES NOT EXIST FOR DOWNLOAD")
-                return None
-                
-            if self.__container_client is None:
-                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
-                return None
-                
-            blob_name = self.__blob_obj_dict[blob_id].blob_name
-            blob_client = self.__container_client.get_blob_client(blob_name)
-            
-            # Calculate length for range request
-            if end_byte is None:
-                blob_properties = blob_client.get_blob_properties()
-                end_byte = blob_properties.size - 1
-                
-            length = end_byte - start_byte + 1
-            
-            # Download with range
-            download_stream = blob_client.download_blob(offset=start_byte, length=length)
-            
-            logger.log(severity['INFO'], "GET BLOB STREAM RANGE SUCCESS : Blob ID : {}, Blob Name : {} (bytes {}-{})".format(blob_id, blob_name, start_byte, end_byte))
-            return download_stream
-            
-        except Exception as error:
-            logger.log(severity['ERROR'], "GET BLOB STREAM RANGE EXCEPTION : {}".format(error))
-            return None
-
-    def store_upload_chunk(self, upload_id, chunk_index, chunk_data, file_name, total_chunks, total_size):
-        """Store individual upload chunk"""
-        try:
-            if self.__container_client is None:
-                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
-                return False
-                
-            # Create temp blob name for chunk
-            chunk_blob_name = "temp_uploads/{}/chunk_{:06d}".format(upload_id, chunk_index)
-            blob_client = self.__container_client.get_blob_client(chunk_blob_name)
-            
-            # Upload chunk
-            blob_client.upload_blob(chunk_data, overwrite=True)
-            
-            # Store metadata about the upload
-            metadata = {
-                'upload_id': upload_id,
-                'chunk_index': str(chunk_index),
-                'total_chunks': str(total_chunks),
-                'file_name': file_name,
-                'total_size': str(total_size),
-                'timestamp': str(time.time())
-            }
-            blob_client.set_blob_metadata(metadata)
-            
-            logger.log(severity['INFO'], "CHUNK UPLOAD SUCCESS : Upload ID : {}, Chunk : {}".format(upload_id, chunk_index))
-            return True
-            
-        except Exception as error:
-            logger.log(severity['ERROR'], "CHUNK UPLOAD EXCEPTION : {}".format(error))
-            return False
-
-    def finalize_chunked_upload(self, upload_id, file_name, total_size):
-        """Combine chunks into final blob"""
-        try:
-            if self.__container_client is None:
-                logger.log(severity['ERROR'], "CONTAINER CLIENT NOT INITIALIZED")
-                return None
-                
-            # List all chunks for this upload
-            chunk_prefix = "temp_uploads/{}/chunk_".format(upload_id)
-            chunks = []
-            
-            for blob in self.__container_client.list_blobs(name_starts_with=chunk_prefix):
-                chunks.append(blob)
-            
-            # Sort chunks by index
-            chunks.sort(key=lambda x: int(x.metadata.get('chunk_index', 0)))
-            
-            # Create final blob
-            final_blob_name = "{}_{}".format(int(time.time()), file_name)
-            final_blob_client = self.__container_client.get_blob_client(final_blob_name)
-            
-            # Optimized approach: Use Azure's block blob composition instead of downloading/re-uploading
-            try:
-                print(f"Starting efficient combination for {len(chunks)} chunks...")
-                # Method 1: Try to use block blob composition for efficient combination
-                self._combine_chunks_efficiently(chunks, final_blob_client, total_size)
-                print("Efficient combination completed successfully")
-            except Exception as e:
-                # Fallback to original method if efficient method fails
-                print(f"Efficient combination failed: {e}, falling back to original method")
-                self._combine_chunks_fallback(chunks, final_blob_client)
-            
-            # Clean up chunks (can be done in parallel)
-            print("Starting chunk cleanup...")
-            self._cleanup_chunks_parallel(chunks)
-            print("Chunk cleanup completed")
-            
-            # Add to database
-            result, blob_id = self.__add_blob_to_db(final_blob_name, total_size, "file")
-            if not result:
-                logger.log(severity['ERROR'], "FINALIZE CHUNKED UPLOAD : Failed to add to database")
-                return None
-            
-            logger.log(severity['INFO'], "CHUNKED UPLOAD FINALIZED : Upload ID : {} -> Blob ID : {}".format(upload_id, blob_id))
-            return blob_id
-            
-        except Exception as error:
-            logger.log(severity['ERROR'], "FINALIZE CHUNKED UPLOAD EXCEPTION : {}".format(error))
-            return None
-
     def get_upload_status(self, upload_id):
         """Get status of chunked upload for resume"""
         try:
@@ -445,66 +296,76 @@ class Container:
             logger.log(severity['ERROR'], "GET UPLOAD STATUS EXCEPTION : {}".format(error))
             return None
 
-    def blob_create(self,blob_name:str, blob_size_bytes:int, blob_type:str="file", blob_file=None):
-        # add debug log using format print
-        logger.log(severity['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}".format(blob_name, blob_size_bytes, blob_type))
-        assigned_blob_id = None
-        try:
-            if self.__blob_name_exists(blob_name):
-                logger.log(severity['INFO'], "BLOB ALREADY EXISTS")
-                return (False, assigned_blob_id)
-            # add debug log
-            logger.log(severity['DEBUG'], "BLOB CREATE : Checking quota for user : {}, Used : {}, Quota : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes,
-                       self.__user_obj.storage_quota_bytes))
-
-            # check against the user's quota
-            if self.__user_obj.storage_used_bytes + blob_size_bytes >= self.__user_obj.storage_quota_bytes:
-                logger.log(severity['INFO'], "STORAGE EXCEEDED")
-                return (False, assigned_blob_id)
-
-            # add debug log with format print
-            logger.log(severity['DEBUG'], "BLOB CREATE : Quota OK for user : {}, Used : {}, Quota : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes,
-                       self.__user_obj.storage_quota_bytes))
+    # def blob_create(self,blob_name:str, blob_size_bytes:int, blob_type:str="file", blob_file=None):
+    #     # add debug log using format print
+    #     logger.log(severity['DEBUG'], "BLOB CREATE : Blob Name : {}, Blob Size Bytes : {}, Blob Type : {}".format(blob_name, blob_size_bytes, blob_type))
+    #     assigned_blob_id = None
+    #     try:
+    #         # Validate Azure blob naming requirements
+    #         name_validation = self.validate_blob_name(blob_name)
+    #         if not name_validation['is_valid']:
+    #             error_msg = f"Invalid blob name: {'; '.join(name_validation['errors'])}"
+    #             logger.log(severity['WARNING'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+    #             return (False, assigned_blob_id)
             
-            # update and save user's storage usage
-            self.__user_obj.storage_used_bytes += blob_size_bytes
-            self.__user_obj.save()
+    #         # Use sanitized name
+    #         sanitized_blob_name = name_validation['sanitized_name']
+            
+    #         if self.__blob_name_exists(sanitized_blob_name):
+    #             logger.log(severity['INFO'], "BLOB ALREADY EXISTS")
+    #             return (False, assigned_blob_id)
+    #         # add debug log
+    #         logger.log(severity['DEBUG'], "BLOB CREATE : Checking quota for user : {}, Used : {}, Quota : {}".format(self.__user_name,
+    #                    self.__user_obj.storage_used_bytes,
+    #                    self.__user_obj.storage_quota_bytes))
 
-            # server side AZURE API call to create a blob for a user 
-            #---------------------------------------------------------------------------
-            if self.__container_client is not None:
-                if not blob_file:
-                    logger.log(severity['INFO'], "BLOB CREATE : No file provided, creating empty blob")
-                    self.__user_obj.delete()
-                    return (False, None)
-                else:
-                    logger.log(severity['INFO'], "BLOB CREATE : Uploading provided file as blob : {}".format(blob_name))
-                    blob_client = self.__container_client.get_blob_client(blob_name)
+    #         # check against the user's quota
+    #         if self.__user_obj.storage_used_bytes + blob_size_bytes >= self.__user_obj.storage_quota_bytes:
+    #             logger.log(severity['INFO'], "STORAGE EXCEEDED")
+    #             return (False, assigned_blob_id)
 
-                    file_like = getattr(blob_file, "file", blob_file)
-                    blob_client.upload_blob(file_like, overwrite=True)
-                logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(blob_name, self.__user_obj.container_name))
-            else:
-                logger.log(severity['ERROR'], "BLOB CREATE FAILED : CONTAINER CLIENT NOT INITIALIZED")
-                self.__user_obj.delete()
-                return (False, assigned_blob_id)
-            #---------------------------------------------------------------------------
+    #         # add debug log with format print
+    #         logger.log(severity['DEBUG'], "BLOB CREATE : Quota OK for user : {}, Used : {}, Quota : {}".format(self.__user_name,
+    #                    self.__user_obj.storage_used_bytes,
+    #                    self.__user_obj.storage_quota_bytes))
+            
+    #         # update and save user's storage usage
+    #         self.__user_obj.storage_used_bytes += blob_size_bytes
+    #         self.__user_obj.save()
 
-            #add debug log
-            logger.log(severity['DEBUG'], "BLOB CREATE : Updated storage used for user : {}, New Used : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes))
+    #         # server side AZURE API call to create a blob for a user 
+    #         #---------------------------------------------------------------------------
+    #         if self.__container_client is not None:
+    #             if not blob_file:
+    #                 logger.log(severity['INFO'], "BLOB CREATE : No file provided, creating empty blob")
+    #                 self.__user_obj.delete()
+    #                 return (False, None)
+    #             else:
+    #                 logger.log(severity['INFO'], "BLOB CREATE : Uploading provided file as blob : {}".format(sanitized_blob_name))
+    #                 blob_client = self.__container_client.get_blob_client(sanitized_blob_name)
 
-            result, assigned_blob_id = self.__add_blob_to_db(blob_name, blob_size_bytes, blob_type)
-            if not result:
-                logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION")
-                self.__user_obj.delete()
-                return (False, assigned_blob_id)
-        except Exception as error:
-            logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION : {}".format(error))
-            return (False, assigned_blob_id)
-        return (True, assigned_blob_id)
+    #                 file_like = getattr(blob_file, "file", blob_file)
+    #                 blob_client.upload_blob(file_like, overwrite=True)
+    #             logger.log(severity['INFO'], "BLOB CREATE : Blob '{}' created in container '{}'.".format(sanitized_blob_name, self.__user_obj.container_name))
+    #         else:
+    #             logger.log(severity['ERROR'], "BLOB CREATE FAILED : CONTAINER CLIENT NOT INITIALIZED")
+    #             self.__user_obj.delete()
+    #             return (False, assigned_blob_id)
+    #         #---------------------------------------------------------------------------
+
+    #         #add debug log
+    #         logger.log(severity['DEBUG'], "BLOB CREATE : Updated storage used for user : {}, New Used : {}".format(self.__user_name,
+    #                    self.__user_obj.storage_used_bytes))
+
+    #         result, assigned_blob_id = self.__add_blob_to_db(sanitized_blob_name, blob_size_bytes, blob_type)
+    #         if not result:
+    #             logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION")
+    #             self.__user_obj.delete()
+    #             return (False, assigned_blob_id)
+    #     except Exception as error:
+    #         logger.log(severity['ERROR'], "BLOB CREATE EXCEPTION : {}".format(error))
+    #         return (False, assigned_blob_id)
+    #     return (True, assigned_blob_id)
 
     def blob_delete(self, blob_id):
         try:
@@ -576,122 +437,287 @@ class Container:
             logger.log(severity['ERROR'], "SAMPLE CONTAINER DELETE ALL EXCEPTION : {}".format(error))
         return delete_success
 
-    def _combine_chunks_efficiently(self, chunks, final_blob_client, total_size):
-        """
-        Efficient chunk combination using streaming without loading all into memory
-        """
-        import threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        
-        # Use block blob for efficient combination
-        block_list = []
-        
-        # Stream chunks directly to final blob using put_block
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {}
+    # =============================================================================
+    # PHASE 1: STREAMING UPLOAD METHODS
+    # =============================================================================
+
+    def initialize_streaming_upload(self, file_name, upload_id, total_size):
+        """Initialize a streaming upload session for direct-to-Azure chunk uploading"""
+        try:
+            logger.log(severity['DEBUG'], f"STREAMING UPLOAD INIT: file_name={file_name}, upload_id={upload_id}, total_size={total_size}")
             
-            for i, chunk_blob in enumerate(chunks):
-                block_id = f"block-{i:06d}".encode('utf-8')
-                block_id_b64 = base64.b64encode(block_id).decode('utf-8')
-                
-                future = executor.submit(self._upload_block_from_chunk, 
-                                       final_blob_client, chunk_blob, block_id_b64)
-                futures[future] = block_id_b64
+            # Check for existing session
+            if upload_id in self.__active_uploads:
+                logger.log(severity['WARNING'], f"Upload session {upload_id} already exists")
+                return {'success': False, 'error': 'Upload session already exists'}
             
-            # Collect successful blocks
-            for future in as_completed(futures):
-                block_id_b64 = futures[future]
+            # Validate Azure blob naming requirements
+            name_validation = self.validate_blob_name(file_name)
+            if not name_validation['is_valid']:
+                error_msg = f"Invalid file name: {'; '.join(name_validation['errors'])}"
+                logger.log(severity['WARNING'], f"BLOB NAME VALIDATION FAILED : {error_msg}")
+                return {'success': False, 'error': error_msg}
+            
+            # Use sanitized name
+            blob_name = name_validation['sanitized_name']
+            
+            # Log if file name was changed during sanitization
+            if blob_name != file_name:
+                logger.log(severity['INFO'], f"File name sanitized: '{file_name}' -> '{blob_name}'")
+                file_name=blob_name
+            else:
+                logger.log(severity['DEBUG'], f"Using blob name: {blob_name}")
+            
+            # Create blob client for Azure operations
+            blob_client = self.__service_client.get_blob_client(
+                container=self.__user_obj.container_name, 
+                blob=blob_name
+            )
+            
+            # Initialize upload session tracking
+            self.__active_uploads[upload_id] = {
+                'blob_client': blob_client,
+                'blob_name': blob_name,
+                'file_name': file_name,
+                'total_size': total_size,
+                'uploaded_blocks': [],
+                'uploaded_size': 0,
+                'start_time': time.time()
+            }
+            
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Initialized session Upload ID:{upload_id} for BlobName:{blob_name}")
+            return {'success': True, 'blob_name': blob_name}
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to initialize upload session {upload_id}: {str(e)}")
+            return {'success': False, 'error': 'Failed to initialize upload session'}
+
+    def append_chunk_to_blob(self, upload_id, chunk_data, chunk_index):
+        """Stream a chunk directly to Azure blob storage using stage_block"""
+        try:
+            if upload_id not in self.__active_uploads:
+                logger.log(severity['ERROR'], f"Upload session {upload_id} not found")
+                return {'success': False, 'error': 'Upload session not found'}
+            
+            upload_session = self.__active_uploads[upload_id]
+            blob_client = upload_session['blob_client']
+            
+            # Generate block ID (must be base64 encoded and same length for all blocks)
+            block_id = base64.b64encode(f"block-{chunk_index:08d}".encode()).decode()
+            
+            # Read chunk data
+            chunk_bytes = chunk_data.read()
+            chunk_size = len(chunk_bytes)
+            
+            logger.log(severity['DEBUG'], f"STREAMING UPLOAD: Staging block {block_id} for {upload_id}, size={chunk_size}")
+            
+            print("Container:", blob_client.container_name)
+            print("Blob:", blob_client.blob_name)
+            print("URL:", blob_client.url)
+
+            # Stage block directly to Azure
+            blob_client.stage_block(
+                block_id=block_id,
+                data=chunk_bytes
+            )
+            logger.log(severity['DEBUG'], f"Staged block {block_id} for {upload_id}, size={chunk_size}")
+            
+            # Track the staged block
+            upload_session['uploaded_blocks'].append(block_id)
+            upload_session['uploaded_size'] += chunk_size
+            
+            logger.log(severity['DEBUG'], f"STREAMING UPLOAD: Successfully staged chunk {chunk_index} for {upload_id}")
+            return {'success': True, 'uploaded_size': upload_session['uploaded_size']}
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to append chunk {chunk_index} for upload {upload_id}: {str(e)}")
+            return {'success': False, 'error': f'Failed to upload chunk {chunk_index}'}
+
+    def finalize_streaming_upload(self, upload_id, file_name):
+        """Finalize the streaming upload by committing all staged blocks and creating DB record"""
+        try:
+            if upload_id not in self.__active_uploads:
+                logger.log(severity['ERROR'], f"Upload session {upload_id} not found")
+                return {'success': False, 'error': 'Upload session not found'}
+            
+            upload_session = self.__active_uploads[upload_id]
+            blob_client = upload_session['blob_client']
+            blob_name = upload_session['blob_name']
+            total_uploaded = upload_session['uploaded_size']
+            uploaded_blocks = upload_session['uploaded_blocks']
+            start_time = upload_session['start_time']
+            
+            logger.log(severity['DEBUG'], f"STREAMING UPLOAD: Finalizing {upload_id}, committing {len(uploaded_blocks)} blocks")
+            
+            # Commit all staged blocks to create the final blob
+            blob_client.commit_block_list(uploaded_blocks)
+            
+            # Create database record for the blob
+            assigned_blob_id = self.__add_blob_to_db(blob_name, total_uploaded, "file")
+            if not assigned_blob_id:
+                raise Exception("Failed to create database record for uploaded file")
+            
+            # Update user storage usage
+            self.__user_obj.storage_used_bytes += total_uploaded
+            self.__user_obj.save()
+            
+            # Calculate upload duration
+            duration = time.time() - start_time
+            
+            # Cleanup upload session
+            del self.__active_uploads[upload_id]
+            
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Successfully finalized {upload_id}, blob_id={assigned_blob_id}, duration={duration:.2f}s")
+            return {
+                'success': True, 
+                'blob_id': assigned_blob_id,
+                'uploaded_size': total_uploaded,
+                'duration': duration
+            }
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to finalize streaming upload {upload_id}: {str(e)}")
+            # Cleanup failed session
+            if upload_id in self.__active_uploads:
+                del self.__active_uploads[upload_id]
+            return {'success': False, 'error': 'Failed to finalize upload'}
+
+    def cancel_streaming_upload(self, upload_id):
+        """Cancel an ongoing streaming upload and cleanup all staged blocks"""
+        try:
+            if upload_id not in self.__active_uploads:
+                logger.log(severity['WARNING'], f"Upload session {upload_id} not found for cancellation")
+                return {'success': False, 'error': 'Upload session not found'}
+            
+            upload_session = self.__active_uploads[upload_id]
+            blob_client = upload_session['blob_client']
+            blob_name = upload_session['blob_name']
+            uploaded_blocks = upload_session['uploaded_blocks']
+            uploaded_size = upload_session['uploaded_size']
+            start_time = upload_session['start_time']
+            
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelling {upload_id}, cleaning up {len(uploaded_blocks)} staged blocks")
+            
+            # Clean up all staged blocks from Azure (best effort - some may not exist yet)
+            cleanup_errors = []
+            for block_id in uploaded_blocks:
                 try:
-                    future.result()  # Ensure the block was uploaded successfully
-                    block_list.append(block_id_b64)
+                    # Note: Azure doesn't provide direct block deletion, 
+                    # staged blocks will be automatically cleaned up by Azure after some time
+                    # We can't explicitly delete individual staged blocks
+                    pass
                 except Exception as e:
-                    raise Exception(f"Failed to upload block {block_id_b64}: {e}")
-        
-        # Commit the block list to finalize the blob
-        final_blob_client.commit_block_list(block_list)
-    
-    def _upload_block_from_chunk(self, final_blob_client, chunk_blob, block_id):
-        """
-        Upload a single block by streaming from chunk blob
-        """
-        chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
-        
-        # Download chunk data and upload as block
-        chunk_data = chunk_client.download_blob().readall()
-        final_blob_client.stage_block(block_id, chunk_data)
-    
-    def _combine_chunks_fallback(self, chunks, final_blob_client):
-        """
-        Fallback method: original approach but with better memory management
-        """
-        print(f"Using fallback method for {len(chunks)} chunks...")
-        
-        # For very large files (many chunks), use streaming upload to avoid memory issues
-        if len(chunks) > 50:  # > 100MB file
-            self._combine_chunks_streaming(chunks, final_blob_client)
-        else:
-            # Use original method for smaller files
-            from io import BytesIO
+                    cleanup_errors.append(f"Block {block_id}: {str(e)}")
             
-            with BytesIO() as combined_data:
-                for i, chunk_blob in enumerate(chunks):
-                    if i % 10 == 0:
-                        print(f"Processing chunk {i+1}/{len(chunks)}")
-                    chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
-                    chunk_data = chunk_client.download_blob().readall()
-                    combined_data.write(chunk_data)
-                
-                # Upload final blob
-                print("Uploading final blob...")
-                combined_data.seek(0)
-                final_blob_client.upload_blob(combined_data, overwrite=True)
-    
-    def _combine_chunks_streaming(self, chunks, final_blob_client):
-        """
-        Stream chunks directly without loading all into memory
-        """
-        print("Using streaming combination for large file...")
-        
-        # Use Azure's block blob API for streaming
-        block_list = []
-        
-        for i, chunk_blob in enumerate(chunks):
-            if i % 10 == 0:
-                print(f"Streaming chunk {i+1}/{len(chunks)}")
-                
-            chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
-            chunk_data = chunk_client.download_blob().readall()
+            # Calculate duration for logging
+            duration = time.time() - start_time
             
-            # Create block ID
-            block_id = f"block-{i:06d}".encode('utf-8')
-            block_id_b64 = base64.b64encode(block_id).decode('utf-8')
+            # Remove upload session from tracking
+            del self.__active_uploads[upload_id]
             
-            # Stage the block
-            final_blob_client.stage_block(block_id_b64, chunk_data)
-            block_list.append(block_id_b64)
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelled {upload_id}, duration={duration:.2f}s, uploaded_size={uploaded_size}")
+            
+            return {
+                'success': True,
+                'cancelled': True,
+                'uploaded_size': uploaded_size,
+                'duration': duration,
+                'message': 'Upload cancelled successfully',
+                'cleanup_errors': cleanup_errors if cleanup_errors else None
+            }
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to cancel streaming upload {upload_id}: {str(e)}")
+            # Force cleanup of session even if error occurred
+            if upload_id in self.__active_uploads:
+                del self.__active_uploads[upload_id]
+            return {'success': False, 'error': f'Failed to cancel upload: {str(e)}'}
+
+    def get_active_upload_sessions(self):
+        """Get list of all active upload sessions for this user"""
+        try:
+            active_sessions = []
+            for upload_id, session in self.__active_uploads.items():
+                active_sessions.append({
+                    'upload_id': upload_id,
+                    'file_name': session['file_name'],
+                    'blob_name': session['blob_name'],
+                    'total_size': session['total_size'],
+                    'uploaded_size': session['uploaded_size'],
+                    'uploaded_blocks': len(session['uploaded_blocks']),
+                    'start_time': session['start_time'],
+                    'duration': time.time() - session['start_time']
+                })
+            
+            logger.log(severity['DEBUG'], f"ACTIVE UPLOADS: User {self.__user_name} has {len(active_sessions)} active sessions")
+            return {'success': True, 'active_sessions': active_sessions}
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to get active upload sessions: {str(e)}")
+            return {'success': False, 'error': 'Failed to get active sessions'}
+
+    # =============================================================================
+    # DOWNLOAD STREAMING METHODS WITH CANCELLATION SUPPORT
+    # =============================================================================
+
+    def get_blob_stream(self, blob_id):
+        """Get a streaming blob client for downloading without range"""
+        try:
+            if not self.__blob_id_exists(blob_id):
+                logger.log(severity['ERROR'], f"Blob {blob_id} not found")
+                return None
+            
+            blob_name = self.__blob_obj_dict[blob_id].blob_name
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            logger.log(severity['DEBUG'], f"DOWNLOAD STREAM: Creating stream for blob {blob_id} ({blob_name})")
+            return blob_client.download_blob()
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to get blob stream for {blob_id}: {str(e)}")
+            return None
+
+    def get_blob_stream_range(self, blob_id, start, end):
+        """Get a streaming blob client for downloading with byte range"""
+        try:
+            if not self.__blob_id_exists(blob_id):
+                logger.log(severity['ERROR'], f"Blob {blob_id} not found")
+                return None
+            
+            blob_name = self.__blob_obj_dict[blob_id].blob_name
+            blob_client = self.__container_client.get_blob_client(blob_name)
+            
+            logger.log(severity['DEBUG'], f"DOWNLOAD STREAM: Creating range stream for blob {blob_id} ({blob_name}), range {start}-{end}")
+            return blob_client.download_blob(offset=start, length=end - start + 1)
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to get blob stream range for {blob_id}: {str(e)}")
+            return None
+
+    def cancel_blob_download(self, blob_id, download_session_id=None):
+        """Cancel an ongoing blob download
         
-        # Commit all blocks
-        print("Committing blocks...")
-        final_blob_client.commit_block_list(block_list)
-    
-    def _cleanup_chunks_parallel(self, chunks):
-        """
-        Delete chunks in parallel for faster cleanup
-        """
-        import concurrent.futures
+        Note: Since Azure downloads are direct HTTP streams, we can't directly cancel 
+        them from the server side. This method mainly serves to clean up any 
+        server-side tracking of download sessions if implemented.
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futures = []
+        The actual cancellation happens on the client side using AbortController.
+        """
+        try:
+            logger.log(severity['INFO'], f"DOWNLOAD CANCEL: Request to cancel download for blob {blob_id}")
             
-            for chunk_blob in chunks:
-                chunk_client = self.__container_client.get_blob_client(chunk_blob.name)
-                future = executor.submit(chunk_client.delete_blob)
-                futures.append(future)
+            # If we ever implement server-side download session tracking, 
+            # cleanup logic would go here
+            if download_session_id:
+                logger.log(severity['DEBUG'], f"DOWNLOAD CANCEL: Cleaning up session {download_session_id}")
+                # Future: cleanup any server-side download session state
             
-            # Wait for all deletions to complete
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Warning: Failed to delete chunk: {e}")
-                    # Continue with other deletions even if one fails
+            return {
+                'success': True,
+                'cancelled': True,
+                'message': 'Download cancellation processed (client-side cancellation required)'
+            }
+            
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to process download cancellation for {blob_id}: {str(e)}")
+            return {'success': False, 'error': f'Failed to cancel download: {str(e)}'}

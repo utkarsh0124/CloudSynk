@@ -1,0 +1,181 @@
+#!/bin/bash
+
+# Production Environment Setup Script for CloudSynk
+# This script sets up a secure production environment
+
+export BASE_DIR=${PWD}/
+export DJANGO_ENV="production"
+
+# Source Azure credentials (critical for Azure Blob Storage)
+source ../.bashrc
+source ../az_intf
+
+# Set production environment variables
+export DEBUG=false
+export DJANGO_DEBUG=false
+export ALLOWED_HOSTS="your-domain.com,www.your-domain.com"  # UPDATE THIS
+export DJANGO_SECRET_KEY=""  # MUST BE SET FROM SECURE SOURCE
+export SECURE_SSL_REDIRECT=true
+export SESSION_COOKIE_SECURE=true
+export CSRF_COOKIE_SECURE=true
+
+# Production logging
+export LOG_LEVEL="WARNING"
+export DJANGO_LOG_LEVEL="WARNING"
+
+# Security headers
+export SECURE_BROWSER_XSS_FILTER=true
+export SECURE_CONTENT_TYPE_NOSNIFF=true
+export X_FRAME_OPTIONS="DENY"
+
+# Database settings (should use external DB in production)
+export DATABASE_URL=""  # SET TO PRODUCTION DATABASE
+
+echo "=== CloudSynk Production Environment Setup ==="
+echo "⚠️  SECURITY CHECKLIST BEFORE PROCEEDING:"
+echo ""
+echo "1. ✅ Set DJANGO_SECRET_KEY from secure source (not hardcoded)"
+echo "2. ✅ Update ALLOWED_HOSTS with your production domain"
+echo "3. ✅ Configure production database (not SQLite)"
+echo "4. ✅ Set up HTTPS/SSL certificates"
+echo "5. ✅ Configure Azure Key Vault for secrets"
+echo "6. ✅ Set up monitoring and logging"
+echo "7. ✅ Review firewall and network security"
+echo ""
+
+# Validate critical environment variables
+if [ -z "$DJANGO_SECRET_KEY" ]; then
+    echo "❌ ERROR: DJANGO_SECRET_KEY not set!"
+    echo "   Generate with: python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'"
+    echo "   Store securely and set as environment variable"
+    exit 1
+fi
+
+if [ "$ALLOWED_HOSTS" = "your-domain.com,www.your-domain.com" ]; then
+    echo "❌ ERROR: ALLOWED_HOSTS still contains default values!"
+    echo "   Update with your actual production domain(s)"
+    exit 1
+fi
+
+# Check if Python version file exists and clean up
+if [ -f "python_version.tmp" ]; then
+    rm -rf python_version.tmp
+fi
+
+# Create and activate virtual environment
+python3 -m venv .storage-env-prod
+source .storage-env-prod/bin/activate
+
+python3 --version > python_version.tmp
+echo "✅ Python version checked"
+rm -rf python_version.tmp
+
+# Validate virtual environment
+if [ -f venv.tmp ]; then
+    rm -rf venv.tmp
+fi
+
+echo "$VIRTUAL_ENV" | sed -e 's/\/.*\///g' > venv.tmp
+if [ ! -s venv.tmp ]; then
+    echo "❌ FAILED: Virtual env not installed"
+    echo "To install virtual env run: apt install python3.8-venv"
+    exit 1
+fi
+
+# Install production dependencies
+if [ "storage-env-prod" != "$(cat venv.tmp)" ]; then
+    source ${BASE_DIR}/.storage-env-prod/bin/activate
+    
+    # Install production requirements with security updates
+    python3 -m pip install --upgrade pip
+    python3 -m pip install -r requirements.txt
+    
+    # Install additional production packages
+    python3 -m pip install gunicorn whitenoise django-environ psycopg2-binary
+fi
+rm -rf venv.tmp
+
+export PYTHONPATH=${PWD}/../:$PYTHONPATH
+
+echo "✅ Production Virtual Environment activated"
+
+# Simple arg parsing
+NO_NODE=0
+for arg in "$@"; do
+    case "$arg" in
+        --no-node)
+            NO_NODE=1
+            ;;
+        --help|-h)
+            echo "Usage: source env-setup-prod [--no-node]"
+            echo ""
+            echo "Production environment setup for CloudSynk"
+            echo "Requires proper configuration of environment variables"
+            return 0 2>/dev/null || exit 0
+            ;;
+    esac
+done
+
+# Handle Node.js dependencies for production
+if [ -f package.json ]; then
+    if [ "$NO_NODE" = "1" ]; then
+        echo "⏭️  SKIPPING: Node dependency installation (--no-node)"
+    else
+        if command -v npm >/dev/null 2>&1; then
+            echo "📦 Installing production frontend dependencies..."
+            export NODE_ENV=production
+            
+            if [ -f package-lock.json ]; then
+                echo "Using package-lock.json -> running: npm ci --production"
+                npm ci --production || echo "npm ci failed. Check manually."
+            else
+                echo "No package-lock.json found -> running: npm install --production"
+                npm install --production || echo "npm install failed. Check manually."
+            fi
+            
+            # Build production assets if build script exists
+            if npm run | grep -q "build"; then
+                echo "🔨 Building production assets..."
+                npm run build || echo "Build failed. Check manually."
+            fi
+        else
+            echo "❌ npm not available. Install Node.js for production asset building."
+            exit 1
+        fi
+    fi
+fi
+
+# Final production checks
+echo ""
+echo "🔍 PRODUCTION READINESS CHECKS:"
+echo ""
+
+# Check Django settings
+if python3 -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storage_webapp.settings_prod'); from django.conf import settings; print('✅ Django settings loaded')" 2>/dev/null; then
+    echo "✅ Django production settings accessible"
+else
+    echo "❌ Django production settings not found or invalid"
+    echo "   Create storage_webapp/settings_prod.py for production"
+fi
+
+# Check critical directories
+if [ ! -d "static" ]; then
+    echo "⚠️  Static files directory not found - run collectstatic"
+fi
+
+if [ ! -d "media" ]; then
+    mkdir -p media
+    echo "✅ Created media directory"
+fi
+
+echo ""
+echo "🚀 NEXT STEPS FOR PRODUCTION DEPLOYMENT:"
+echo "1. python manage.py check --deploy"
+echo "2. python manage.py collectstatic"
+echo "3. python manage.py migrate"
+echo "4. Set up reverse proxy (nginx/Apache)"
+echo "5. Configure SSL certificates"
+echo "6. Set up monitoring and backups"
+echo ""
+echo "✅ PRODUCTION ENVIRONMENT READY"
+echo "⚠️  Remember: Test thoroughly before going live!"

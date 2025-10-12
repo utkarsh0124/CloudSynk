@@ -10,8 +10,10 @@ class TransferManager {
         this.downloads = new Map();
         this.activeTransfers = new Map();
         this.maxConcurrentTransfers = 1;
+        this.maxConcurrentUploads = 1; // Only allow 1 upload at a time
         this.chunkSize = 1 * 1024 * 1024; // 1MB chunks
         this.currentView = 'all'; // all, uploads, downloads
+        this.pageReloadPending = false; // Track if page reload is pending
         
         this.init();
     }
@@ -51,6 +53,9 @@ class TransferManager {
         this.updateUI();
         this.processQueue();
 
+        // Show modal with downloads tab active
+        this.showModal('downloads');
+
         return transferId;
     }
 
@@ -58,6 +63,32 @@ class TransferManager {
      * Add a new upload to the queue
      */
     addUpload(file) {
+        // Validate file size - prevent 0-byte file uploads
+        if (file.size === 0) {
+            console.error('❌ Cannot upload empty file (0 bytes):', file.name);
+            this.showNotification(`Cannot upload empty file "${file.name}" (0 bytes)`, 'error');
+            return false;
+        }
+        
+        // Check if there are any active or queued uploads
+        const existingUploads = Array.from(this.uploads.values()).filter(t => 
+            ['queued', 'active', 'finalizing'].includes(t.status)
+        );
+        
+        if (existingUploads.length >= this.maxConcurrentUploads) {
+            const currentUpload = existingUploads[0];
+            console.warn('⚠️ Upload already in progress:', currentUpload.fileName);
+            this.showNotification(
+                `Upload already in progress: "${currentUpload.fileName}". Please wait for it to complete before uploading another file.`,
+                'warning',
+                7000 // Show longer for this important message
+            );
+            
+            // Show the transfer manager to let user see current upload
+            this.showModal('uploads');
+            return false;
+        }
+        
         const transferId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         const transfer = {
@@ -90,6 +121,9 @@ class TransferManager {
         this.updateUI();
         this.processQueue();
 
+        // Show modal with uploads tab active
+        this.showModal('uploads');
+
         return transferId;
     }
 
@@ -104,6 +138,12 @@ class TransferManager {
      * Process the transfer queue
      */
     async processQueue() {
+        // Don't start new transfers if page reload is pending
+        if (this.pageReloadPending) {
+            console.log('Page reload pending, skipping queue processing');
+            return;
+        }
+
         const activeCount = Array.from(this.activeTransfers.values())
             .filter(t => t.status === 'active').length;
 
@@ -111,9 +151,26 @@ class TransferManager {
             return;
         }
 
-        // Find next queued transfer
-        const queuedTransfer = Array.from(this.activeTransfers.values())
-            .find(t => t.status === 'queued');
+        // Count active uploads and downloads separately
+        const activeUploads = Array.from(this.activeTransfers.values())
+            .filter(t => t.type === 'upload' && t.status === 'active').length;
+        const activeDownloads = Array.from(this.activeTransfers.values())
+            .filter(t => t.type === 'download' && t.status === 'active').length;
+
+        // Find next queued transfer, prioritizing uploads to complete them quickly
+        let queuedTransfer = null;
+        
+        // If no uploads are active, allow one upload to start
+        if (activeUploads === 0) {
+            queuedTransfer = Array.from(this.activeTransfers.values())
+                .find(t => t.type === 'upload' && t.status === 'queued');
+        }
+        
+        // If no upload found or uploads are at limit, try downloads
+        if (!queuedTransfer && activeDownloads === 0) {
+            queuedTransfer = Array.from(this.activeTransfers.values())
+                .find(t => t.type === 'download' && t.status === 'queued');
+        }
 
         if (!queuedTransfer) {
             return;
@@ -229,12 +286,10 @@ class TransferManager {
 
         // Combine chunks and trigger download
         const blob = new Blob(transfer.chunks);
-        this.triggerDownload(blob, fileName);
+        this.triggerDownload(blob, fileName, transfer);
         
-        // Allow a brief moment for download to initiate before marking complete
-        setTimeout(() => {
-            this.moveToCompleted(transfer);
-        }, 100);
+        // Mark as completed and remove from active downloads
+        this.completeDownload(transfer);
     }
 
     /**
@@ -258,13 +313,10 @@ class TransferManager {
             }
 
             const blob = await response.blob();
-            this.triggerDownload(blob, fileName);
+            this.triggerDownload(blob, fileName, transfer);
             
-            transfer.progress = 100;
-            // Allow a brief moment for download to initiate before marking complete
-            setTimeout(() => {
-                this.moveToCompleted(transfer);
-            }, 100);
+            // Mark as completed and remove from active downloads
+            this.completeDownload(transfer);
 
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -326,7 +378,7 @@ class TransferManager {
                     // Update status to show completion but KEEP in modal
                     transfer.status = 'finalizing';
                     transfer.progress = 100;
-                    transfer.statusMessage = 'File uploaded, server combining chunks...';
+                    transfer.statusMessage = 'Finalizing uploading on server...';
                     this.updateUI();
                     
                     // Wait before showing success message
@@ -337,6 +389,9 @@ class TransferManager {
                         
                         transfer.statusMessage = 'Upload completed successfully!';
                         this.updateUI();
+                        
+                        // Set flag to prevent new transfers before reload
+                        this.pageReloadPending = true;
                         
                         // Wait before reloading to show the new file
                         setTimeout(() => {
@@ -360,6 +415,9 @@ class TransferManager {
                         setTimeout(() => {
                             transfer.statusMessage = 'Upload processing completed';
                             this.updateUI();
+                            
+                            // Set flag to prevent new transfers before reload
+                            this.pageReloadPending = true;
                             
                             // Remove from modal after timeout
                             setTimeout(() => {
@@ -395,6 +453,9 @@ class TransferManager {
                         // Update status to show likely completion but KEEP visible
                         transfer.statusMessage = 'Upload likely completed (check file list)';
                         this.updateUI();
+                        
+                        // Set flag to prevent new transfers before reload
+                        this.pageReloadPending = true;
                         
                         // Only remove after extended time
                         setTimeout(() => {
@@ -440,6 +501,9 @@ class TransferManager {
             transfer.progress = 100;
             this.moveToCompleted(transfer);
 
+            // Set flag to prevent new transfers before reload
+            this.pageReloadPending = true;
+            
             // Refresh the page to show new file
             window.location.reload();
 
@@ -466,7 +530,6 @@ class TransferManager {
         // Use longer timeout for the final chunk that includes finalization
         const isLastChunk = chunkIndex === totalChunks - 1;
         const timeoutMs = isLastChunk ? 120000 : 60000; // 2 minutes for final chunk, 1 minute for others
-        
         // Create timeout promise
         const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => {
@@ -490,7 +553,6 @@ class TransferManager {
                     const errorData = await response.json();
                     errorMessage = errorData.error || errorMessage;
                 } catch (e) {
-                    // Could not parse error response as JSON
                 }
                 throw new Error(errorMessage);
             }
@@ -499,7 +561,12 @@ class TransferManager {
         });
 
         // Race between fetch and timeout
-        return Promise.race([fetchPromise, timeoutPromise]);
+        try {
+            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            return result;
+        } catch (error) {
+            throw error;
+        }
     }
 
     /**
@@ -526,9 +593,7 @@ class TransferManager {
     /**
      * Pause a transfer
      */
-    pauseTransfer(transferId) {
-        console.log('Attempting to pause transfer:', transferId);
-        
+    pauseTransfer(transferId) {        
         const transfer = this.activeTransfers.get(transferId) || 
                         this.uploads.get(transferId) || 
                         this.downloads.get(transferId);
@@ -539,13 +604,10 @@ class TransferManager {
         }
 
         if (transfer.status === 'active') {
-            console.log('Pausing active transfer:', transferId);
             transfer.abortController.abort();
             transfer.status = 'paused';
             this.updateUI();
             this.processQueue(); // Start next transfer
-        } else {
-            console.log('Transfer not in active state, current status:', transfer.status);
         }
     }
 
@@ -569,18 +631,103 @@ class TransferManager {
     /**
      * Cancel a transfer
      */
-    cancelTransfer(transferId) {
+    async cancelTransfer(transferId) {
         const transfer = this.activeTransfers.get(transferId) || 
                         this.uploads.get(transferId) || 
                         this.downloads.get(transferId);
 
         if (transfer) {
+            // Abort the client-side request
             transfer.abortController.abort();
+            
+            // Notify server for cleanup
+            try {
+                if (transfer.type === 'upload') {
+                    // Cancel upload session on server
+                    await this.cancelUploadOnServer(transfer.uploadId);
+                } else if (transfer.type === 'download') {
+                    // Cancel download session on server (mainly for logging)
+                    await this.cancelDownloadOnServer(transfer.blobId, transfer.id);
+                }
+            } catch (error) {
+                console.warn('Failed to notify server of cancellation:', error);
+                // Continue with client-side cleanup even if server notification fails
+            }
+            
+            // Remove from local tracking
             this.activeTransfers.delete(transferId);
             this.uploads.delete(transferId);
             this.downloads.delete(transferId);
+            
+            // Clear any stored resume data
+            this.clearResumeData(transferId);
+            
             this.updateUI();
             this.processQueue();
+        }
+    }
+
+    /**
+     * Cancel upload session on server
+     */
+    async cancelUploadOnServer(uploadId) {
+        try {
+            const response = await fetch(`/chunkedUpload/?upload_id=${uploadId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+            } else {
+                console.warn('Failed to cancel upload on server:', response.status);
+            }
+        } catch (error) {
+            console.warn('Error cancelling upload on server:', error);
+        }
+    }
+
+    /**
+     * Cancel download session on server
+     */
+    async cancelDownloadOnServer(blobId, downloadSessionId) {
+        try {
+            const response = await fetch(`/cancelDownload/${blobId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    download_session_id: downloadSessionId
+                }),
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+            } else {
+                console.warn('Failed to cancel download on server:', response.status);
+            }
+        } catch (error) {
+            console.warn('Error cancelling download on server:', error);
+        }
+    }
+
+    /**
+     * Clear resume data for a transfer
+     */
+    clearResumeData(transferId) {
+        try {
+            localStorage.removeItem(`transfer_${transferId}`);
+            localStorage.removeItem(`download_${transferId}`);
+            localStorage.removeItem(`upload_${transferId}`);
+        } catch (error) {
+            console.warn('Error clearing resume data:', error);
         }
     }
 
@@ -608,6 +755,26 @@ class TransferManager {
         this.activeTransfers.delete(transfer.id);
         this.updateUI();
         this.processQueue();
+    }
+
+    /**
+     * Complete a download transfer and remove it from the UI
+     */
+    completeDownload(transfer) {
+        // Set final status
+        transfer.status = 'completed';
+        transfer.progress = 100;
+        
+        // Show brief completion message
+        this.updateUI();
+        
+        // Remove from all tracking after a short delay to show completion
+        setTimeout(() => {
+            this.activeTransfers.delete(transfer.id);
+            this.downloads.delete(transfer.id);
+            this.updateUI();
+            this.processQueue();
+        }, 2000); // Show completion for 2 seconds, then remove
     }
 
     /**
@@ -804,12 +971,12 @@ class TransferManager {
     /**
      * Show the transfer manager modal
      */
-    showModal() {
+    showModal(defaultTab = 'uploads') {
         $('#transfer-manager-modal').removeClass('hidden');
         
-        // Initialize with uploads tab active
-        this.currentView = 'uploads';
-        this.switchTab('uploads');
+        // Initialize with the specified tab active
+        this.currentView = defaultTab;
+        this.switchTab(defaultTab);
         
         this.updateUI();
     }
@@ -855,7 +1022,7 @@ class TransferManager {
 
         // Populate queued uploads
         if (queuedUploads.length === 0) {
-            queueContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center">No queued uploads</div>');
+            queueContainer.html('<div class="text-gray-500 text-sm bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-200 text-center"><i class="fas fa-info-circle mr-2"></i>Only one file can be uploaded at a time</div>');
         } else {
             const html = queuedUploads.map(transfer => this.renderTransferItem(transfer)).join('');
             queueContainer.html(html);
@@ -972,7 +1139,7 @@ class TransferManager {
                 <div class="w-full bg-purple-200 rounded-full h-2">
                     <div class="bg-purple-500 h-2 rounded-full animate-pulse" style="width: 100%"></div>
                 </div>
-                <p class="text-xs text-purple-600 mt-1">⚙️ Server is combining file chunks...</p>
+                <p class="text-xs text-purple-600 mt-1">⚙️ Finalizing upload on server...</p>
             `;
         }
 
@@ -989,38 +1156,49 @@ class TransferManager {
      */
     renderTransferControls(transfer) {
         if (transfer.status === 'error') {
-            return `<button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Remove">
-                <i class="fas fa-times"></i>
+            return `<button class="cancel-transfer-btn px-3 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm font-medium" data-transfer-id="${transfer.id}" title="Remove failed transfer">
+                <i class="fas fa-times mr-1"></i>Remove
             </button>`;
         }
 
         if (transfer.status === 'finalizing') {
-            return `<span class="px-2 py-1 rounded bg-purple-100 text-purple-600 text-sm" title="Processing file on server...">
+            return `<span class="px-3 py-1 rounded bg-purple-100 text-purple-600 text-sm font-medium" title="Processing file on server...">
                 <i class="fas fa-cog fa-spin mr-1"></i>Processing
             </span>`;
         }
 
         if (transfer.status === 'active') {
-            return `<button class="pause-transfer-btn px-2 py-1 rounded text-white bg-orange-500 hover:bg-orange-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Pause">
-                <i class="fas fa-pause"></i>
-            </button>`;
+            return `
+                <button class="pause-transfer-btn px-2 py-1 rounded text-white bg-orange-500 hover:bg-orange-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Pause transfer">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel transfer permanently">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
         }
 
         if (transfer.status === 'paused') {
             return `
-                <button class="resume-transfer-btn px-2 py-1 rounded text-white bg-green-500 hover:bg-green-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Resume">
+                <button class="resume-transfer-btn px-2 py-1 rounded text-white bg-green-500 hover:bg-green-600 transition-colors text-sm mr-1" data-transfer-id="${transfer.id}" title="Resume transfer">
                     <i class="fas fa-play"></i>
                 </button>
-                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel">
+                <button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-red-500 hover:bg-red-600 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel transfer permanently">
                     <i class="fas fa-times"></i>
                 </button>
             `;
         }
 
         if (transfer.status === 'queued') {
-            return `<button class="cancel-transfer-btn px-2 py-1 rounded text-white bg-gray-500 hover:bg-red-500 transition-colors text-sm" data-transfer-id="${transfer.id}" title="Cancel">
-                <i class="fas fa-times"></i>
+            return `<button class="cancel-transfer-btn px-3 py-1 rounded text-white bg-gray-500 hover:bg-red-500 transition-colors text-sm font-medium" data-transfer-id="${transfer.id}" title="Cancel queued transfer">
+                <i class="fas fa-times mr-1"></i>Cancel
             </button>`;
+        }
+
+        if (transfer.status === 'completed') {
+            return `<span class="px-3 py-1 rounded bg-green-100 text-green-600 text-sm font-medium" title="Transfer completed successfully">
+                <i class="fas fa-check mr-1"></i>Complete
+            </span>`;
         }
 
         return '';
@@ -1032,6 +1210,14 @@ class TransferManager {
     renderTransferStats(transfer) {
         if (transfer.status === 'error') {
             return '<p class="text-xs text-red-600 mt-1">Transfer failed</p>';
+        }
+
+        if (transfer.status === 'completed') {
+            if (transfer.type === 'download') {
+                return '<p class="text-xs text-green-600 mt-1">100% • Download completed</p>';
+            } else {
+                return '<p class="text-xs text-green-600 mt-1">100% • Upload completed</p>';
+            }
         }
 
         if (transfer.status === 'finalizing') {
@@ -1053,6 +1239,14 @@ class TransferManager {
         if (transfer.status === 'paused') {
             const progress = Math.round(transfer.progress || 0);
             return `<p class="text-xs text-orange-600 mt-1">${progress}% • Paused</p>`;
+        }
+
+        if (transfer.status === 'queued') {
+            // Show special message if page reload is pending
+            if (this.pageReloadPending && transfer.type === 'download') {
+                return '<p class="text-xs text-blue-600 mt-1">Waiting for upload to complete...</p>';
+            }
+            return '<p class="text-xs text-gray-600 mt-1">Waiting...</p>';
         }
 
         return '<p class="text-xs text-gray-600 mt-1">Waiting...</p>';
@@ -1082,15 +1276,25 @@ class TransferManager {
 
     getCsrfToken() {
         const input = document.querySelector('[name=csrfmiddlewaretoken]');
-        return input ? input.value : null;
+        const token = input ? input.value : null;
+        return token;
     }
 
-    triggerDownload(blob, filename) {
+    triggerDownload(blob, filename, transfer = null) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
         document.body.appendChild(a);
+        
+        // Add event listeners to detect if download was successful
+        if (transfer) {
+            // Set up a timer to assume download started after a reasonable delay
+            const downloadTimer = setTimeout(() => {
+                // Assume download was initiated successfully
+            }, 1000);
+        }
+        
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
@@ -1116,33 +1320,42 @@ class TransferManager {
             
             let restoredCount = 0;
             
-            // Restore active transfers (convert to paused for manual resume)
+            // Only restore download transfers (uploads can't be resumed without File objects)
             if (state.activeTransfers) {
                 state.activeTransfers
-                    .filter(([id, transfer]) => transfer.createdAt > cutoff)
+                    .filter(([id, transfer]) => transfer.createdAt > cutoff && transfer.type === 'download')
                     .forEach(([id, transfer]) => {
-                        // Convert active transfers to paused state
+                        // Convert active transfers to paused state for manual resume
                         transfer.status = transfer.status === 'active' ? 'paused' : transfer.status;
                         
                         // Recreate non-serializable objects
                         transfer.abortController = new AbortController();
                         
-                        // Skip uploads without file data (can't be resumed)
-                        if (transfer.type === 'upload' && !transfer.file) {
-                            console.warn(`Skipping upload transfer ${id} - file data not available`);
-                            return;
-                        }
-                        
                         this.activeTransfers.set(id, transfer);
-                        
-                        // Also add to type-specific maps
-                        if (transfer.type === 'upload') {
-                            this.uploads.set(id, transfer);
-                        } else if (transfer.type === 'download') {
-                            this.downloads.set(id, transfer);
-                        }
+                        this.downloads.set(id, transfer);
                         
                         restoredCount++;
+                    });
+            }
+            
+            // Restore downloads from downloads map as well
+            if (state.downloads) {
+                state.downloads
+                    .filter(([id, transfer]) => transfer.createdAt > cutoff && !this.downloads.has(id))
+                    .forEach(([id, transfer]) => {
+                        // Recreate non-serializable objects
+                        transfer.abortController = new AbortController();
+                        
+                        this.downloads.set(id, transfer);
+                        
+                        // Add to active transfers if it was active/paused
+                        if (['active', 'paused', 'queued'].includes(transfer.status)) {
+                            if (transfer.status === 'active') {
+                                transfer.status = 'paused'; // Convert to paused for manual resume
+                            }
+                            this.activeTransfers.set(id, transfer);
+                            restoredCount++;
+                        }
                     });
             }
             
@@ -1193,10 +1406,16 @@ class TransferManager {
                 return serialized;
             };
 
+            // Only save download transfers since uploads can't be resumed without File objects
+            const downloadsForStorage = Array.from(this.downloads.entries()).map(([id, transfer]) => [id, serializeTransfer(transfer)]);
+            const activeDownloadsForStorage = Array.from(this.activeTransfers.entries())
+                .filter(([id, transfer]) => transfer.type === 'download')
+                .map(([id, transfer]) => [id, serializeTransfer(transfer)]);
+
             const state = {
-                activeTransfers: Array.from(this.activeTransfers.entries()).map(([id, transfer]) => [id, serializeTransfer(transfer)]),
-                uploads: Array.from(this.uploads.entries()).map(([id, transfer]) => [id, serializeTransfer(transfer)]),
-                downloads: Array.from(this.downloads.entries()).map(([id, transfer]) => [id, serializeTransfer(transfer)]),
+                activeTransfers: activeDownloadsForStorage, // Only save download transfers
+                uploads: [], // Don't save uploads - they can't be resumed
+                downloads: downloadsForStorage,
                 timestamp: Date.now(),
                 version: '1.0' // For future compatibility
             };
@@ -1225,11 +1444,6 @@ class TransferManager {
                     <div class="flex items-start">
                         <i class="fas fa-info-circle mr-2 mt-0.5"></i>
                         <div class="flex-1">
-                            <p class="font-medium">Transfers Restored</p>
-                            <p class="text-sm">Restored ${count} paused transfer(s) from previous session. Open Transfer Manager to resume.</p>
-                            <button class="mt-2 text-xs bg-blue-200 hover:bg-blue-300 px-2 py-1 rounded" onclick="window.transferManager.showModal();">
-                                Open Transfer Manager
-                            </button>
                         </div>
                         <button class="ml-2 text-blue-700 hover:text-blue-900" onclick="$(this).parent().parent().fadeOut()">
                             <i class="fas fa-times"></i>
@@ -1240,14 +1454,14 @@ class TransferManager {
             $('body').append(notification);
         } else {
             // Update existing notification
-            notification.find('p').last().text(`Restored ${count} paused transfer(s) from previous session. Open Transfer Manager to resume.`);
+            notification.find('p').last().text(`Restored ${count} paused download(s) from previous session. Open Transfer Manager to resume.`);
         }
         
         // Show notification and auto-hide after 15 seconds (longer for user to read)
         notification.fadeIn();
         setTimeout(() => {
             notification.fadeOut();
-        }, 15000);
+        }, 5000);
     }
 
     /**
@@ -1292,7 +1506,133 @@ class TransferManager {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
+
+    /**
+     * Sync with server's active upload sessions
+     */
+    async syncActiveUploadsWithServer() {
+        try {
+            const response = await fetch('/activeUploads/', {
+                method: 'GET',
+                headers: {
+                    'X-CSRFToken': this.getCsrfToken(),
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.active_sessions) {
+                    // Check if we have local uploads that are no longer on server
+                    for (const [transferId, transfer] of this.uploads) {
+                        if (transfer.type === 'upload' && transfer.status === 'active') {
+                            const serverSession = result.active_sessions.find(
+                                session => session.upload_id === transfer.uploadId
+                            );
+                            
+                            if (!serverSession) {
+                                console.warn(`Upload ${transferId} not found on server, marking as failed`);
+                                transfer.status = 'error';
+                                transfer.error = 'Upload session lost on server';
+                                this.updateUI();
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to sync with server active uploads:', error);
+        }
+    }
+
+    /**
+     * Start periodic sync with server (call this on page load)
+     */
+    startServerSync() {
+        // Sync immediately
+        this.syncActiveUploadsWithServer();
+        
+        // Then sync every 30 seconds
+        setInterval(() => {
+            this.syncActiveUploadsWithServer();
+        }, 60000);
+    }
+
+    /**
+     * Process queue after page load (handles transfers that were waiting for reload)
+     */
+    processQueueAfterPageLoad() {
+        // Reset the page reload pending flag
+        this.pageReloadPending = false;
+        
+        // Small delay to ensure page is fully loaded
+        setTimeout(() => {
+            this.processQueue();
+        }, 1000);
+    }
+
+    /**
+     * Show notification to user
+     */
+    showNotification(message, type = 'info', duration = 5000) {
+        // Create notification element if it doesn't exist
+        let notification = $('#transfer-notification');
+        if (notification.length === 0) {
+            notification = $(`
+                <div id="transfer-notification" class="fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm transition-all duration-300">
+                    <div class="flex items-start">
+                        <div class="flex-1">
+                            <p class="font-medium notification-title"></p>
+                            <p class="text-sm notification-message"></p>
+                        </div>
+                        <button class="ml-2 notification-close hover:opacity-75" onclick="$(this).parent().parent().fadeOut()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            `);
+            $('body').append(notification);
+        }
+        
+        // Set notification style based on type
+        let classes, iconHtml, title;
+        if (type === 'success') {
+            classes = 'bg-green-100 border border-green-400 text-green-700';
+            iconHtml = '<i class="fas fa-check-circle mr-2"></i>';
+            title = 'Success';
+        } else if (type === 'error') {
+            classes = 'bg-red-100 border border-red-400 text-red-700';
+            iconHtml = '<i class="fas fa-exclamation-triangle mr-2"></i>';
+            title = 'Error';
+        } else if (type === 'warning') {
+            classes = 'bg-yellow-100 border border-yellow-400 text-yellow-700';
+            iconHtml = '<i class="fas fa-exclamation-circle mr-2"></i>';
+            title = 'Warning';
+        } else {
+            classes = 'bg-blue-100 border border-blue-400 text-blue-700';
+            iconHtml = '<i class="fas fa-info-circle mr-2"></i>';
+            title = 'Info';
+        }
+        
+        notification.attr('class', `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm transition-all duration-300 ${classes}`);
+        notification.find('.notification-title').html(iconHtml + title);
+        notification.find('.notification-message').text(message);
+        notification.find('.notification-close').attr('class', `ml-2 notification-close hover:opacity-75 ${type === 'error' ? 'text-red-700' : type === 'success' ? 'text-green-700' : type === 'warning' ? 'text-yellow-700' : 'text-blue-700'}`);
+        
+        // Show notification and auto-hide after duration
+        notification.fadeIn();
+        setTimeout(() => {
+            notification.fadeOut();
+        }, duration);
+    }
 }
 
 // Initialize global transfer manager
 window.transferManager = new TransferManager();
+
+// Start server sync and process queue on page load
+$(document).ready(function() {
+    window.transferManager.startServerSync();
+    window.transferManager.processQueueAfterPageLoad();
+});

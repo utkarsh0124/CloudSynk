@@ -142,6 +142,10 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+# Media files (User uploaded content)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -157,6 +161,12 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
 }
+
+# Email configuration for development: output emails to console
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Default from email for outgoing mails
+# get email id from environment variable or set a default
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@cloudsynk.local')
 
 
 # allauth minimal config (email optional)

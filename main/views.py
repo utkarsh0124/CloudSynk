@@ -2,23 +2,30 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from django.shortcuts import redirect
-from .serializers import UserSerializer
+from .serializers import UserSerializer, OTPVerifySerializer
 from az_intf.api_utils import utils as app_utils
 from az_intf import api as az_api
-from .models import UserInfo
+from .models import UserInfo, PendingUser
+from django.contrib.auth.hashers import make_password
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 from .subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import render
 from django.conf import settings
+from django.core.mail import send_mail  # keep for backward compatibility if needed
+from .mailing import send_otp_email
 from apiConfig import AZURE_API_DISABLE
-from datetime import datetime
+from datetime import datetime, timedelta
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from storage_webapp import logger, severity
 from django.http import StreamingHttpResponse
+from .utils import get_avatar_url
 import requests
+import random
 
 def _is_api_request(request):
     """Return True if the request should be treated as an API/XHR call returning JSON.
@@ -80,22 +87,134 @@ class SignupAPIView(APIView):
 
         if app_utils.user_exists(username):
             return Response({'success': False, 'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = serializer.create({'username': username, 'password': password, 'email': email})
-
-        created = az_api.init_container(user, username, app_utils.assign_container(username), email)
-        if not created:
-            return Response({'success': False, 'error': 'Container Initialization Failed'}, status=status.HTTP_400_BAD_REQUEST)
-
-        container_instance = az_api.get_container_instance(username)
-        if container_instance is None:
-            user.delete()
-            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        # API request: return JSON; browser request: redirect to login
+        # Stage user signup in SignupRequest
+        code = f"{random.randint(100000, 999999)}"
+        expires_at = timezone.now() + timedelta(minutes=10)
+        # Create or update pending signup to avoid duplicates
+        pending = PendingUser.objects.filter(username=username).first()
+        if pending:
+            if pending.is_expired():
+                pending.delete()
+                pending = PendingUser.objects.create(
+                    username=username,
+                    password=make_password(password),
+                    email=email,
+                    code=code,
+                    expires_at=expires_at
+                )
+            else:
+                pending.code = code
+                pending.expires_at = expires_at
+                pending.password = make_password(password)
+                pending.email = email
+                pending.save()
+        else:
+            pending = PendingUser.objects.create(
+                username=username,
+                password=make_password(password),
+                email=email,
+                code=code,
+                expires_at=expires_at
+            )
+        # Send OTP via email
+        subject = 'Your CloudSynk OTP Verification Code'
+        message = f'Use the following OTP to verify your account: {code}'
+        from_email = settings.DEFAULT_FROM_EMAIL
+        # Send OTP via SMTP utility
+        try:
+            send_otp_email(email, subject, message)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to send OTP email: {e}")
+        # Return response indicating OTP sent (API) or render OTP page (browser)
         if _is_api_request(request):
-            return Response({'success': True, 'user_id': user.id}, status=status.HTTP_201_CREATED)
-        return redirect('/login/')
+            return Response({'success': True, 'message': 'OTP sent to email.', 'pending_id': pending.id}, status=status.HTTP_201_CREATED)
+        return render(request, 'user/verify_otp.html', {'pending_id': pending.id})
+
+class OTPVerifyAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        pending_id = request.data.get('pending_id')
+        code = request.data.get('code')
+        try:
+            pending = PendingUser.objects.get(id=pending_id)
+        except PendingUser.DoesNotExist:
+            return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check max OTP entry attempts
+        if pending.otp_attempts >= 5:
+            pending.delete()
+            return Response({'success': False, 'error': 'Maximum OTP attempts exceeded. Please signup again.'}, status=status.HTTP_403_FORBIDDEN)
+        # Validate code
+        if pending.code != code or pending.is_expired():
+            pending.otp_attempts += 1
+            pending.save()
+            attempts_left = max(0, 5 - pending.otp_attempts)
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Incorrect OTP. Please try again.',
+                    'attempts_left': attempts_left
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Successful verification, proceed
+        # Create actual user with hashed password
+        user = User.objects.create(
+            username=pending.username,
+            password=pending.password,
+            email=pending.email
+        )
+        user.is_active = True
+        user.save()
+
+        # Initialize container
+        created = az_api.init_container(user, user.username, app_utils.assign_container(user.username), user.email)
+        if not created:
+            return Response({'success': False, 'error': 'Container initialization failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Remove pending registration
+        pending.delete()
+        return Response({'success': True, 'message': 'Account created and activated.'}, status=status.HTTP_200_OK)
+
+class ResendOTPAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        pending_id = request.data.get('pending_id')
+        if not pending_id:
+            return Response({'success': False, 'error': 'Missing pending_id'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            pending = PendingUser.objects.get(id=pending_id)
+        except PendingUser.DoesNotExist:
+            return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check expiration
+        if pending.is_expired():
+            pending.delete()
+            return Response({'success': False, 'error': 'OTP request expired, please signup again.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Throttle resends
+        now = timezone.now()
+        elapsed = (now - pending.last_sent_at).total_seconds()
+        if elapsed < 180:
+            retry_after = int(180 - elapsed)
+            return Response({'success': False, 'error': f'Please wait {retry_after}s before resending.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if pending.resend_count >= 2:
+            return Response({'success': False, 'error': 'Maximum resend attempts reached.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        # Generate new OTP
+        code = f"{random.randint(100000, 999999)}"
+        pending.code = code
+        pending.last_sent_at = now
+        pending.expires_at = now + timedelta(minutes=10)
+        pending.resend_count += 1
+        pending.save()
+        # Send OTP via email
+        subject = 'Your CloudSynk OTP Verification Code'
+        message = f'Use the following OTP to verify your account: {code}'
+        # Send OTP via SMTP utility
+        try:
+            send_otp_email(pending.email, subject, message)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to resend OTP email: {e}")
+        resends_left = max(0, 2 - pending.resend_count)
+        return Response({'success': True, 'resend_count': pending.resend_count, 'resends_left': resends_left}, status=status.HTTP_200_OK)
 
 class LoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -275,8 +394,60 @@ class HomeAPIView(APIView):
         
         # Refresh user_info_obj after storage recalculation
         user_info_obj = UserInfo.objects.filter(user=user).values()[0]
+        
+        # Get the UserInfo model instance for avatar URL calculation
+        user_info_instance = UserInfo.objects.get(user=user)
+        avatar_url = get_avatar_url(user_info_instance)
+        if avatar_url is None:
+            logger.log(severity['ERROR'], f"Failed to get avatar URL for user {user.username}, using default placeholder")
+        
+        # Add avatar URL to the context object
+        user_info_obj['avatar_url'] = avatar_url
 
-        blob_list = api_instance.get_blob_info()
+        # Check if user is admin
+        is_admin = is_admin_user(user)
+        
+        blob_list = []
+        admin_users = []
+        
+        if is_admin:
+            # For admin users, get user list instead of blob list
+            all_users = User.objects.all().order_by('-date_joined')
+            for usr in all_users:
+                try:
+                    usr_info = UserInfo.objects.get(user=usr)
+                    admin_users.append({
+                        'id': usr.id,
+                        'username': usr.username,
+                        'email': usr.email,
+                        'is_active': usr.is_active,
+                        'date_joined': usr.date_joined,
+                        'last_login': usr.last_login,
+                        'user_name': usr_info.user_name,
+                        'subscription_type': usr_info.subscription_type,
+                        'storage_used_bytes': usr_info.storage_used_bytes,
+                        'storage_quota_bytes': usr_info.storage_quota_bytes,
+                        'is_admin': usr.is_superuser or usr.is_staff or usr_info.subscription_type == 'OWNER',
+                        'avatar_url': usr_info.avatar_url
+                    })
+                except UserInfo.DoesNotExist:
+                    admin_users.append({
+                        'id': usr.id,
+                        'username': usr.username,
+                        'email': usr.email,
+                        'is_active': usr.is_active,
+                        'date_joined': usr.date_joined,
+                        'last_login': usr.last_login,
+                        'user_name': usr.username,
+                        'subscription_type': 'TESTER',
+                        'storage_used_bytes': 0,
+                        'storage_quota_bytes': SUBSCRIPTION_VALUES['TESTER'],
+                        'is_admin': usr.is_superuser or usr.is_staff,
+                        'avatar_url': None
+                    })
+        else:
+            # For regular users, get blob list
+            blob_list = api_instance.get_blob_info()
 
         # convert numeric uploaded_at to datetime string for JSON serialization
         for blob_obj in blob_list:
@@ -294,13 +465,16 @@ class HomeAPIView(APIView):
             return Response({
                 'success': True, 
                 'blobs': blob_list, 
+                'admin_users': admin_users,
+                'is_admin': is_admin,
                 'user': {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
                     'is_authenticated': True
                 },
-                'user_info': user_info_obj
+                'user_info': user_info_obj,
+                'subscription_choices': [{'value': choice[0], 'label': choice[1]} for choice in SUBSCRIPTION_CHOICES]
             }, status=status.HTTP_200_OK)
         else:
             # For direct browser access, render the template
@@ -308,7 +482,10 @@ class HomeAPIView(APIView):
                 'success': True, 
                 'user_info': user_info_obj,
                 'blobs': blob_list,
-                'user': user  # Add user object for template consistency
+                'admin_users': admin_users,
+                'is_admin': is_admin,
+                'user': user,  # Add user object for template consistency
+                'subscription_choices': SUBSCRIPTION_CHOICES
             }
             return render(request, 'main/sample.html', context)
 
@@ -408,70 +585,121 @@ class ChunkedUploadAPIView(APIView):
         """Handle chunked file upload with resume support"""
         user = request.user
         
+        # Debug logging - log all request data
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD REQUEST: user={user.username}")
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD DATA: {list(request.data.keys())}")
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD FILES: {list(request.FILES.keys())}")
+        
+        # Log specific parameters
+        upload_id = request.data.get('upload_id')
+        chunk_index = request.data.get('chunk_index')
+        total_chunks = request.data.get('total_chunks')
+        file_name = request.data.get('file_name')
+        total_size = request.data.get('total_size')
+        chunk_data = request.FILES.get('chunk')
+        
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD PARAMS: upload_id={upload_id}, chunk_index={chunk_index}, total_chunks={total_chunks}, file_name={file_name}, total_size={total_size}")
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD CHUNK: {chunk_data.name if chunk_data else None}, size={chunk_data.size if chunk_data else None}")
+        
         try:
             user_info = UserInfo.objects.get(user=user)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Found user_info for {user.username}")
         except UserInfo.DoesNotExist:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: UserInfo not found for {user.username}")
             return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get upload parameters
-        upload_id = request.data.get('upload_id')
-        chunk_index = int(request.data.get('chunk_index', 0))
-        total_chunks = int(request.data.get('total_chunks', 1))
-        file_name = request.data.get('file_name')
-        total_size = int(request.data.get('total_size', 0))
-        chunk_data = request.FILES.get('chunk')
+        # Validate required parameters
+        if not upload_id:
+            logger.log(severity['ERROR'], "CHUNKED UPLOAD: Missing upload_id")
+            return Response({'success': False, 'error': 'Missing upload_id parameter'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not file_name:
+            logger.log(severity['ERROR'], "CHUNKED UPLOAD: Missing file_name")
+            return Response({'success': False, 'error': 'Missing file_name parameter'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not chunk_data:
+            logger.log(severity['ERROR'], "CHUNKED UPLOAD: Missing chunk data")
+            return Response({'success': False, 'error': 'Missing chunk data'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Convert string parameters to integers
+        try:
+            chunk_index = int(chunk_index) if chunk_index is not None else 0
+            total_chunks = int(total_chunks) if total_chunks is not None else 1
+            total_size = int(total_size) if total_size is not None else 0
+        except (ValueError, TypeError) as e:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Parameter conversion error: {e}")
+            return Response({'success': False, 'error': f'Invalid parameter format: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Converted params - chunk_index={chunk_index}, total_chunks={total_chunks}, total_size={total_size}")
 
         if not all([upload_id, file_name, chunk_data]):
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Missing required parameters after validation")
             return Response({'success': False, 'error': 'Missing required parameters'}, status=status.HTTP_400_BAD_REQUEST)
 
         api_instance = az_api.get_container_instance(user_info.user_name)
         if not api_instance:
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: API instance creation failed for {user_info.user_name}")
             return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Validate quota for the first chunk only (to avoid multiple validations for the same file)
         if chunk_index == 0:
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: First chunk, validating quota and blob name")
             # Validate against user's quota and file name uniqueness
             blob_validation = api_instance.validate_new_blob_addition(total_size, file_name)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Blob validation result: {blob_validation}")
             if not blob_validation[0]:
+                logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Blob validation failed: {blob_validation[1]}")
                 return Response({'success': False, 'error': blob_validation[1]}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Initialize streaming upload session for first chunk
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Initializing streaming upload session")
+            init_result = api_instance.initialize_streaming_upload(file_name, upload_id, total_size)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Init result: {init_result}")
+            if not init_result['success']:
+                logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Streaming upload init failed: {init_result['error']}")
+                return Response({'success': False, 'error': init_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            # Store chunk
-            result = api_instance.store_upload_chunk(
-                upload_id=upload_id,
-                chunk_index=chunk_index,
-                chunk_data=chunk_data,
-                file_name=file_name,
-                total_chunks=total_chunks,
-                total_size=total_size
-            )
-            
-            if not result:
-                return Response({'success': False, 'error': 'Failed to store chunk'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Appending chunk {chunk_index}")
+            # Stream chunk directly to Azure
+            chunk_result = api_instance.append_chunk_to_blob(upload_id, chunk_data, chunk_index)
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Chunk append result: {chunk_result}")
+            if not chunk_result['success']:
+                logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Chunk append failed: {chunk_result['error']}")
+                return Response({'success': False, 'error': chunk_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             # Check if upload is complete
             if chunk_index == total_chunks - 1:
-                # Finalize upload synchronously but with progress updates
-                blob_id = api_instance.finalize_chunked_upload(upload_id, file_name, total_size)
-                if blob_id:
+                logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Final chunk, finalizing upload")
+                # Finalize streaming upload
+                finalize_result = api_instance.finalize_streaming_upload(upload_id, file_name)
+                logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Finalize result: {finalize_result}")
+                if finalize_result['success']:
+                    logger.log(severity['INFO'], f"CHUNKED UPLOAD: Upload completed successfully")
                     return Response({
                         'success': True, 
                         'completed': True,
-                        'blob_id': blob_id,
-                        'message': 'Upload completed'
+                        'blob_id': finalize_result['blob_id'],
+                        'uploaded_size': finalize_result['uploaded_size'],
+                        'duration': finalize_result.get('duration', 0),
+                        'message': 'Upload completed successfully'
                     }, status=status.HTTP_201_CREATED)
                 else:
-                    return Response({'success': False, 'error': 'Failed to finalize upload'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Finalization failed: {finalize_result['error']}")
+                    return Response({'success': False, 'error': finalize_result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
+            logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Chunk {chunk_index} completed successfully")
             return Response({
                 'success': True,
                 'completed': False,
                 'chunk_index': chunk_index,
-                'message': f'Chunk {chunk_index + 1}/{total_chunks} uploaded'
+                'uploaded_size': chunk_result.get('uploaded_size', 0),
+                'message': f'Chunk {chunk_index + 1}/{total_chunks} streamed to Azure'
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            return Response({'success': False, 'error': f'Upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.log(severity['ERROR'], f"CHUNKED UPLOAD: Streaming upload error: {str(e)}")
+            return Response({'success': False, 'error': f'Streaming upload error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get(self, request):
         """Get upload status for resume"""
@@ -490,3 +718,260 @@ class ChunkedUploadAPIView(APIView):
 
         upload_status = api_instance.get_upload_status(upload_id)
         return Response({'success': True, 'upload_status': upload_status}, status=status.HTTP_200_OK)
+    
+    def delete(self, request):
+        """Cancel upload session"""
+        upload_id = request.query_params.get('upload_id')
+        if not upload_id:
+            return Response({'success': False, 'error': 'Missing upload_id'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cancel_result = api_instance.cancel_streaming_upload(upload_id)
+        if cancel_result['success']:
+            return Response(cancel_result, status=status.HTTP_200_OK)
+        else:
+            return Response(cancel_result, status=status.HTTP_400_BAD_REQUEST)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CancelDownloadAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, blob_id=None):
+        """Cancel download session (mainly for logging - actual cancellation is client-side)"""
+        if not blob_id:
+            return Response({'success': False, 'error': 'Missing blob ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        download_session_id = request.data.get('download_session_id')
+        
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cancel_result = api_instance.cancel_blob_download(blob_id, download_session_id)
+        return Response(cancel_result, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ActiveUploadsAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Get list of active upload sessions for the user"""
+        try:
+            user_info = UserInfo.objects.get(user=request.user)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_instance = az_api.get_container_instance(user_info.user_name)
+        if not api_instance:
+            return Response({'success': False, 'error': 'API Instantiation Failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        active_sessions = api_instance.get_active_upload_sessions()
+        return Response(active_sessions, status=status.HTTP_200_OK)
+
+
+# Admin views for managing users
+def is_admin_user(user):
+    """Check if user has admin privileges"""
+    try:
+        user_info = UserInfo.objects.get(user=user)
+        return (user.is_superuser or user.is_staff or 
+                user_info.subscription_type == 'OWNER')
+    except UserInfo.DoesNotExist:
+        return user.is_superuser or user.is_staff
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AdminUserListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get list of all users for admin interface"""
+        # Check if requesting user is admin
+        if not is_admin_user(request.user):
+            if not _is_api_request(request):
+                return redirect('home')
+            return Response({'success': False, 'error': 'Insufficient permissions'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Get all users with their UserInfo
+        users_data = []
+        users = User.objects.all().order_by('-date_joined')
+        
+        for user in users:
+            try:
+                user_info = UserInfo.objects.get(user=user)
+                users_data.append({
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'is_active': user.is_active,
+                    'date_joined': user.date_joined,
+                    'last_login': user.last_login,
+                    'user_name': user_info.user_name,
+                    'subscription_type': user_info.subscription_type,
+                    'storage_used_bytes': user_info.storage_used_bytes,
+                    'storage_quota_bytes': user_info.storage_quota_bytes,
+                    'is_admin': user.is_superuser or user.is_staff or user_info.subscription_type == 'OWNER',
+                    'avatar_url': user_info.avatar_url
+                })
+            except UserInfo.DoesNotExist:
+                # User without UserInfo (shouldn't happen in normal cases)
+                users_data.append({
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'is_active': user.is_active,
+                    'date_joined': user.date_joined,
+                    'last_login': user.last_login,
+                    'user_name': user.username,
+                    'subscription_type': 'TESTER',
+                    'storage_used_bytes': 0,
+                    'storage_quota_bytes': SUBSCRIPTION_VALUES['TESTER'],
+                    'is_admin': user.is_superuser or user.is_staff,
+                    'avatar_url': None
+                })
+        
+        return Response({'success': True, 'users': users_data}, status=status.HTTP_200_OK)
+
+@method_decorator(csrf_exempt, name='dispatch') 
+class AdminDeleteUserAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, user_id):
+        """Delete a user (admin only)"""
+        # Check if requesting user is admin
+        if not is_admin_user(request.user):
+            return Response({'success': False, 'error': 'Insufficient permissions'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            # Get target user
+            target_user = User.objects.get(id=user_id)
+            
+            # Prevent self-deletion
+            if target_user.id == request.user.id:
+                return Response({'success': False, 'error': 'Cannot delete your own account'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get user info for logging and container deletion
+            try:
+                target_user_info = UserInfo.objects.get(user=target_user)
+                username_for_log = target_user_info.user_name
+                container_name = target_user_info.container_name
+            except UserInfo.DoesNotExist:
+                username_for_log = target_user.username
+                container_name = None
+            
+            # Delete Azure storage container and all associated data
+            if container_name and container_name != "None":
+                try:
+                    # Import Container class to handle Azure container deletion
+                    from az_intf.api_utils.Container import Container
+                    
+                    # Create container instance for the target user
+                    container_handler = Container(username_for_log)
+                    
+                    # Delete the Azure container and associated database records
+                    container_deleted = container_handler.container_delete(target_user_info)
+                    
+                    if container_deleted:
+                        logger.log(severity['INFO'], 
+                                  f"Successfully deleted container '{container_name}' for user {username_for_log}")
+                    else:
+                        logger.log(severity['WARNING'], 
+                                  f"Failed to delete container '{container_name}' for user {username_for_log}")
+                        
+                except Exception as container_error:
+                    logger.log(severity['ERROR'], 
+                              f"Error deleting container for user {username_for_log}: {str(container_error)}")
+                    # Continue with user deletion even if container deletion fails
+            
+            # Delete the user (this will cascade delete UserInfo, Blob, Directory records due to CASCADE)
+            target_user.delete()
+            
+            # Log the deletion
+            logger.log(severity['INFO'], 
+                      f"Admin {request.user.username} deleted user {username_for_log} (ID: {user_id}) and associated data")
+            
+            return Response({'success': True, 'message': 'User and all associated data deleted successfully'}, 
+                          status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({'success': False, 'error': 'User not found'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Error deleting user {user_id}: {str(e)}")
+            return Response({'success': False, 'error': 'Failed to delete user'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AdminUpdateUserSubscriptionAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, user_id):
+        """Update user subscription (admin only)"""
+        # Check if requesting user is admin
+        if not is_admin_user(request.user):
+            return Response({'success': False, 'error': 'Insufficient permissions'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        subscription_type = request.data.get('subscription_type')
+        
+        # Validate subscription type
+        valid_subscriptions = [choice[0] for choice in SUBSCRIPTION_CHOICES]
+        if subscription_type not in valid_subscriptions:
+            return Response({'success': False, 'error': 'Invalid subscription type'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get target user
+            target_user = User.objects.get(id=user_id)
+            target_user_info = UserInfo.objects.get(user=target_user)
+            
+            # Store old values for logging
+            old_subscription = target_user_info.subscription_type
+            old_quota = target_user_info.storage_quota_bytes
+            
+            # Update subscription
+            target_user_info.subscription_type = subscription_type
+            target_user_info.storage_quota_bytes = SUBSCRIPTION_VALUES[subscription_type]
+            target_user_info.save()
+            
+            # Log the change
+            logger.log(severity['INFO'], 
+                      f"Admin {request.user.username} changed user {target_user_info.user_name} "
+                      f"subscription from {old_subscription} to {subscription_type} "
+                      f"(quota: {old_quota} -> {SUBSCRIPTION_VALUES[subscription_type]} bytes)")
+            
+            return Response({
+                'success': True, 
+                'message': 'Subscription updated successfully',
+                'new_subscription': subscription_type,
+                'new_quota_bytes': SUBSCRIPTION_VALUES[subscription_type]
+            }, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({'success': False, 'error': 'User not found'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except UserInfo.DoesNotExist:
+            return Response({'success': False, 'error': 'User info not found'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.log(severity['ERROR'], 
+                      f"Error updating subscription for user {user_id}: {str(e)}")
+            return Response({'success': False, 'error': 'Failed to update subscription'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
