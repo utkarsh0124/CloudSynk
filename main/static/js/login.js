@@ -6,6 +6,37 @@ $(function() {
     const $spinner = $('#login-spinner');
     const $alertContainer = $('#alert-container');
     const $alertMessage = $('#alert-message');
+    const $passwordContainer = $('#password-container');
+    const $otpInfo = $('#otp-info');
+    const $passwordField = $('#password');
+    const $loginMethodInput = $('#login_method');
+
+    // Login method selection
+    $('.login-method-tab').on('click', function() {
+        const method = $(this).data('method');
+        
+        // Update active state
+        $('.login-method-tab').removeClass('active');
+        $(this).addClass('active');
+        
+        // Update hidden input
+        $loginMethodInput.val(method);
+        
+        // Show/hide password field and OTP info
+        if (method === 'password') {
+            $passwordContainer.show();
+            $otpInfo.hide();
+            $passwordField.prop('required', true);
+            $text.text('Sign In');
+        } else {
+            $passwordContainer.hide();
+            $otpInfo.show();
+            $passwordField.prop('required', false);
+            $text.text('Send OTP');
+        }
+        
+        hideAlert();
+    });
 
     function showAlert(message, type = 'error') {
         const classes = type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
@@ -18,34 +49,69 @@ $(function() {
         $alertContainer.hide();
     }
 
-    function setLoading(isLoading) {
+    function setLoading(isLoading, method = 'password') {
         $btn.prop('disabled', isLoading);
-        $text.text(isLoading ? 'Signing In...' : 'Sign In');
+        if (method === 'password') {
+            $text.text(isLoading ? 'Signing In...' : 'Sign In');
+        } else {
+            $text.text(isLoading ? 'Sending OTP...' : 'Send OTP');
+        }
         $spinner.toggle(isLoading);
     }
 
     $form.on('submit', function(e) {
         e.preventDefault();
         hideAlert();
-        setLoading(true);
+        
+        const method = $loginMethodInput.val();
+        setLoading(true, method);
+        
+        const formData = {
+            username: $('#username').val(),
+            login_method: method
+        };
+        
+        // Only include password for password method
+        if (method === 'password') {
+            formData.password = $('#password').val();
+        }
+        
         $.ajax({
             url: '/login/',
             type: 'POST',
-            data: new FormData(this),
-            processData: false,
-            contentType: false,
+            data: JSON.stringify(formData),
+            contentType: 'application/json',
+            headers: {
+                'X-CSRFToken': $('input[name=csrfmiddlewaretoken]').val(),
+                'Accept': 'application/json'
+            },
             success(res) {
                 if (res.success) {
-                    window.location.href = '/home/';
+                    if (res.login_otp_id) {
+                        // OTP sent - redirect to verification page
+                        showAlert(res.message || 'OTP sent to your email. Redirecting...', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/login/verify-otp/?login_otp_id=' + res.login_otp_id;
+                        }, 1500);
+                    } else if (res.redirect_to_home) {
+                        // Password login successful - redirect to home
+                        showAlert('Login successful! Redirecting...', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/home/';
+                        }, 1000);
+                    } else {
+                        // Fallback
+                        window.location.href = '/home/';
+                    }
                 } else {
-                    showAlert(res.error || 'Invalid credentials');
-                    setLoading(false);
+                    showAlert(res.error || 'Login failed');
+                    setLoading(false, method);
                 }
             },
             error(xhr) {
                 const msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Server error';
                 showAlert(msg);
-                setLoading(false);
+                setLoading(false, method);
             }
         });
     });

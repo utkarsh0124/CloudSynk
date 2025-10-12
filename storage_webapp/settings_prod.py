@@ -70,9 +70,9 @@ SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 ENABLE_API_ENDPOINTS = os.environ.get('ENABLE_API_ENDPOINTS', 'false').lower() == 'true'
 
 # Production session settings
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 30 * 60  # 30 minutes
-SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Keep user logged in even after browser close
+SESSION_COOKIE_AGE = 24 * 60 * 60  # 24 hours (86400 seconds)
+SESSION_SAVE_EVERY_REQUEST = True  # Extend session on each request (rolling expiration)
 
 # Static files configuration for production
 STATIC_URL = '/static/'

@@ -34,9 +34,9 @@ ALLOWED_HOSTS = ["testserver", "localhost"]
 ENABLE_API_ENDPOINTS = os.environ.get('ENABLE_API_ENDPOINTS', 'false').lower() == 'true'
 
 #user session management
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_COOKIE_AGE = 20 * 60
-SESSION_SAVE_EVERY_REQUEST = False
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Keep user logged in even after browser close
+SESSION_COOKIE_AGE = 24 * 60 * 60  # 24 hours (86400 seconds)
+SESSION_SAVE_EVERY_REQUEST = True  # Extend session on each request (rolling expiration)
 
 LOGIN_URL = '/login/'
 DEFAULT_SUBSCRIPTION_AT_INIT = 'TESTER'
