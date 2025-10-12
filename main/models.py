@@ -21,7 +21,7 @@ class UserInfo(models.Model):
     storage_quota_bytes = models.BigIntegerField(null=False, default=0)  # 0 GB default quota
     storage_used_bytes = models.BigIntegerField(null=False, default=0)
     dob = models.DateField(null=True, blank=True)
-    email_id = models.EmailField(max_length=254, null=True, blank=True)
+    email_id = models.EmailField(max_length=254, null=True, blank=True, unique=True)
     avatar_url = models.CharField(max_length=500, null=True, blank=True)  # Store path to local avatar image
 
 class Blob(models.Model):
@@ -119,6 +119,25 @@ class SignupRequest(models.Model):
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField()
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+
+class LoginOTP(models.Model):
+    """Model to store OTP codes for login verification"""
+    user = models.ForeignKey(
+        'auth.User', on_delete=models.CASCADE, related_name='login_otps'
+    )
+    email = models.EmailField()
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    # Track OTP resends
+    resend_count = models.IntegerField(default=1)
+    last_sent_at = models.DateTimeField(default=timezone.now)
+    # Track OTP entry attempts
+    otp_attempts = models.IntegerField(default=0)
 
     def is_expired(self):
         return timezone.now() > self.expires_at
