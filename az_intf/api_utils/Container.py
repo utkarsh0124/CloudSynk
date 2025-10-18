@@ -28,7 +28,9 @@ class Container:
             logger.log(severity['ERROR'], "FAILED TO INITIALIZE CONTAINER CLIENT")
             # Object not created
             assert False
-        self.__container_client = self.__service_client.get_container_client(self.__user_obj.container_name)
+        # Ensure container name is lowercase (Azure requirement)
+        container_name_lower = self.__user_obj.container_name.lower()
+        self.__container_client = self.__service_client.get_container_client(container_name_lower)
 
         # dictionary of key=blob name, value=blob object
         self.__blob_obj_dict = {blob_obj.blob_id: blob_obj for blob_obj in Blob.objects.filter(user_id=self.__user_obj.user_id)}
@@ -468,9 +470,12 @@ class Container:
             else:
                 logger.log(severity['DEBUG'], f"Using blob name: {blob_name}")
             
+            # Ensure container name is lowercase (Azure requirement)
+            container_name = self.__user_obj.container_name.lower()
+            
             # Create blob client for Azure operations
             blob_client = self.__service_client.get_blob_client(
-                container=self.__user_obj.container_name, 
+                container=container_name, 
                 blob=blob_name
             )
             

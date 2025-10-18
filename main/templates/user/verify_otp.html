@@ -13,17 +13,29 @@
 {% block content %}
 <div class="min-h-screen flex items-center justify-center p-4">
   <div class="w-full max-w-md otp-card rounded-2xl p-8">
-    <h2 class="text-center text-2xl mb-6">Enter OTP</h2>
+    <h2 class="text-center text-2xl mb-6">Verify Your Account</h2>
+    <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+      <p class="text-sm text-blue-800 text-center">
+        <strong>To complete your account creation:</strong><br>
+        Please contact the account owner to obtain your 6-digit OTP code. Once verified, you can login using your email address.
+      </p>
+    </div>
     <div id="alert" class="mb-4 hidden text-center"></div>
     <form id="otp-form">
       {% csrf_token %}
       <input type="hidden" name="pending_id" id="pending_id" value="{{ pending_id }}">
       <div class="mb-4">
-        <input type="text" name="code" id="code" required placeholder="6-digit OTP"
+        <label for="code" class="block text-sm font-medium text-gray-700 mb-2">Enter OTP from Account Owner</label>
+        <input type="text" name="code" id="code" required placeholder="6-digit OTP from owner"
                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
-      <button type="submit" id="verify-btn" class="btn-primary w-full py-3 text-white rounded-lg">Verify</button>
+      <button type="submit" id="verify-btn" class="btn-primary w-full py-3 text-white rounded-lg">Verify & Complete Signup</button>
     </form>
+    <div class="mt-4 text-center">
+      <p class="text-sm text-gray-600">
+        After verification, you can login with your email address: <strong>{{ user_email|default:"your registered email" }}</strong>
+      </p>
+    </div>
   </div>
 </div>
 {% endblock %}

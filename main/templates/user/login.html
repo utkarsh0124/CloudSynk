@@ -43,6 +43,13 @@
     .login-method-tab {
         cursor: pointer;
         transition: all 0.3s ease;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .login-method-tab.active {
         background: linear-gradient(135deg, #174ea6 0%, #4285f4 100%);
@@ -54,6 +61,37 @@
     }
     .login-method-tab:not(.active):hover {
         background: #e5e7eb;
+    }
+    
+    /* Mobile-specific styles */
+    @media (max-width: 768px) {
+        .login-method-tab {
+            min-height: 52px;
+            font-size: 16px;
+            padding: 12px 16px;
+            border: none;
+            outline: none;
+        }
+        .login-method-tab:active {
+            background: #e5e7eb !important;
+            transform: scale(0.98);
+        }
+        .login-method-tab.active:active {
+            background: linear-gradient(135deg, #0f3a7a 0%, #3367d6 100%) !important;
+            transform: scale(0.98);
+        }
+        .login-method-tab:focus {
+            outline: 2px solid #4285f4;
+            outline-offset: 2px;
+        }
+    }
+    
+    /* Ensure buttons reset default button styles */
+    .login-method-tab {
+        border: none;
+        outline: none;
+        background: none;
+        font-family: inherit;
     }
 </style>
 {% endblock %}
@@ -88,20 +126,28 @@
                             <i class="fas fa-shield-alt mr-2 text-gray-400"></i>Login Method
                         </label>
                         <div class="grid grid-cols-2 gap-3">
-                            <div 
+                            <button 
+                                type="button"
                                 id="method-password" 
                                 class="login-method-tab active text-center py-3 rounded-lg font-medium"
                                 data-method="password"
+                                role="tab"
+                                aria-selected="true"
+                                aria-label="Login with password"
                             >
                                 <i class="fas fa-key mr-2"></i>Password
-                            </div>
-                            <div 
+                            </button>
+                            <button 
+                                type="button"
                                 id="method-otp" 
                                 class="login-method-tab text-center py-3 rounded-lg font-medium"
                                 data-method="otp"
+                                role="tab"
+                                aria-selected="false"
+                                aria-label="Login with OTP via email"
                             >
                                 <i class="fas fa-envelope mr-2"></i>OTP via Email
-                            </div>
+                            </button>
                         </div>
                         <input type="hidden" id="login_method" name="login_method" value="password">
                     </div>

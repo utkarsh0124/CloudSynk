@@ -842,7 +842,7 @@ class TransferManager {
                     </div>
                     
                     <!-- Tab Navigation -->
-                    <div class="flex border-b border-gray-200 mb-6">
+                    <div class="flex border-b border-gray-200 mb-4">
                         <button class="transfer-tab px-4 py-3 text-sm font-medium border-b-2 border-blue-500 text-blue-600" data-tab="uploads">
                             <i class="fas fa-upload mr-2"></i>
                             Uploads
@@ -851,6 +851,17 @@ class TransferManager {
                             <i class="fas fa-download mr-2"></i>
                             Downloads
                         </button>
+                    </div>
+
+                    <!-- Warning Message -->
+                    <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div class="flex items-start">
+                            <i class="fas fa-exclamation-triangle text-yellow-600 mr-2 mt-0.5 flex-shrink-0"></i>
+                            <div class="text-sm text-yellow-800">
+                                <strong>Important:</strong> Do not close or minimize your browser while transfers are in progress. 
+                                Doing so may interrupt the process and all progress will be lost.
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Modal Content -->

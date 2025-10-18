@@ -11,13 +11,16 @@ $(function() {
     const $passwordField = $('#password');
     const $loginMethodInput = $('#login_method');
 
-    // Login method selection
-    $('.login-method-tab').on('click', function() {
+    // Login method selection - handle both click and touch events for mobile compatibility
+    $('.login-method-tab').on('click touchend', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const method = $(this).data('method');
         
-        // Update active state
-        $('.login-method-tab').removeClass('active');
-        $(this).addClass('active');
+        // Update active state and ARIA attributes
+        $('.login-method-tab').removeClass('active').attr('aria-selected', 'false');
+        $(this).addClass('active').attr('aria-selected', 'true');
         
         // Update hidden input
         $loginMethodInput.val(method);
@@ -36,6 +39,16 @@ $(function() {
         }
         
         hideAlert();
+    });
+
+    // Prevent double-tap zoom on mobile for better touch experience
+    let lastTouchEnd = 0;
+    $('.login-method-tab').on('touchend', function(e) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+            e.preventDefault();
+        }
+        lastTouchEnd = now;
     });
 
     function showAlert(message, type = 'error') {
