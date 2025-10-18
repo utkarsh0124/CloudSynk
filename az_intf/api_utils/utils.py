@@ -83,11 +83,12 @@ class AzureBlobNameValidator:
     MIN_LENGTH = 1
     MAX_LENGTH = 1024
     
-    # Valid characters: letters, numbers, and these special chars
-    VALID_CHARS_PATTERN = r'^[a-zA-Z0-9\-_\.\/]+$'
+    # According to Azure docs: "A blob name can contain any combination of characters"
+    # We only need to check length and avoid problematic endings
+    # VALID_CHARS_PATTERN = r'^[a-zA-Z0-9\-_\.\/]+$'  # TOO RESTRICTIVE
     
     # Reserved/problematic patterns
-    RESERVED_ENDINGS = ['.', '/']
+    RESERVED_ENDINGS = ['.', '/', '\\']
     
     @classmethod
     def validate_blob_name(cls, blob_name: str) -> dict:
@@ -129,9 +130,13 @@ class AzureBlobNameValidator:
                 errors.append(f'Blob name cannot end with "{ending}"')
                 sanitized = sanitized.rstrip(ending)
         
-        # Check valid characters
-        if not re.match(cls.VALID_CHARS_PATTERN, blob_name):
-            errors.append('Blob name contains invalid characters')
+        # Azure allows any combination of characters, so we remove the restrictive character check
+        # if not re.match(cls.VALID_CHARS_PATTERN, blob_name):
+        #     errors.append('Blob name contains invalid characters')
+        #     sanitized = cls._sanitize_name(sanitized)
+        
+        # Only sanitize if there are problematic endings
+        if len(errors) > 0 and sanitized != blob_name:
             sanitized = cls._sanitize_name(sanitized)
         
         # Final validation of sanitized name
@@ -148,7 +153,8 @@ class AzureBlobNameValidator:
     @classmethod
     def _sanitize_name(cls, name: str) -> str:
         """
-        Sanitize a blob name by replacing invalid characters
+        Sanitize a blob name by removing problematic endings only
+        Azure allows any combination of characters, so we keep this minimal
         
         Args:
             name (str): Name to sanitize
@@ -156,19 +162,13 @@ class AzureBlobNameValidator:
         Returns:
             str: Sanitized name
         """
-        # Replace invalid characters with underscore, but preserve forward slashes for directories
-        sanitized = re.sub(r'[^a-zA-Z0-9\-_\.\/]', '_', name)
+        sanitized = name
         
-        # Remove consecutive underscores, dashes, or dots (but preserve forward slashes)
-        sanitized = re.sub(r'[_\-\.]{2,}', '_', sanitized)
-        
-        # Clean up leading/trailing special characters except forward slash
-        sanitized = sanitized.strip('_-.')
-        
-        # Ensure it doesn't end with reserved characters
+        # Only remove problematic endings
         for ending in cls.RESERVED_ENDINGS:
             sanitized = sanitized.rstrip(ending)
         
+        # If completely empty after sanitization, provide default
         return sanitized if sanitized else 'unnamed_file'
     
     @classmethod
