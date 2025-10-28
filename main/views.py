@@ -211,6 +211,7 @@ class ResendOTPAPIView(APIView):
         # Send OTP via SMTP utility
         try:
             send_otp_email(pending.email, subject, message)
+
         except Exception as e:
             logger.log(severity['ERROR'], f"Failed to resend OTP email: {e}")
         resends_left = max(0, 2 - pending.resend_count)
@@ -250,24 +251,196 @@ class LoginAPIView(APIView):
         return render(request, 'user/login.html')
 
     def post(self, request):
-        # Authenticate credentials from JSON or form data
+        # Get login method from request
+        login_method = request.data.get('login_method') or request.POST.get('login_method', 'password')
         username = request.data.get('username') or request.POST.get('username')
-        password = request.data.get('password') or request.POST.get('password')
+        
+        if not username:
+            if _is_api_request(request):
+                return Response({'success': False, 'error': 'Username is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return render(request, 'user/login.html', {'error': 'Username is required'})
+        
+        # Handle OTP-only login (passwordless)
+        if login_method == 'otp':
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                if _is_api_request(request):
+                    return Response({'success': False, 'error': 'User not found'}, status=status.HTTP_400_BAD_REQUEST)
+                return render(request, 'user/login.html', {'error': 'User not found'})
+            
+            # Generate OTP for login verification (no password validation)
+            code = f"{random.randint(100000, 999999)}"
+            expires_at = timezone.now() + timedelta(minutes=10)
+            
+            # Delete any existing OTP for this user to avoid duplicates
+            LoginOTP.objects.filter(user=user).delete()
+            
+            # Create new LoginOTP record
+            login_otp = LoginOTP.objects.create(
+                user=user,
+                email=user.email,
+                code=code,
+                expires_at=expires_at
+            )
+            
+            # Send OTP via email
+            subject = 'Your CloudSynk Login OTP Verification Code'
+            message = f'Use the following OTP to complete your login: {code}\n\nThis code will expire in 10 minutes.\n\nYou requested passwordless login via OTP.'
+            
+            try:
+                send_otp_email(user.email, subject, message)
+            except Exception as e:
+                logger.log(severity['ERROR'], f"Failed to send login OTP email: {e}")
+            
+            # Return response indicating OTP sent
+            if _is_api_request(request):
+                return Response({
+                    'success': True, 
+                    'message': 'OTP sent to your registered email.', 
+                    'login_otp_id': login_otp.id
+                }, status=status.HTTP_200_OK)
+            
+            return render(request, 'user/verify_login_otp.html', {'login_otp_id': login_otp.id})
+        
+        # Handle password-based login
+        else:  # login_method == 'password'
+            password = request.data.get('password') or request.POST.get('password')
+            
+            if not password:
+                if _is_api_request(request):
+                    return Response({'success': False, 'error': 'Password is required'}, status=status.HTTP_400_BAD_REQUEST)
+                return render(request, 'user/login.html', {'error': 'Password is required'})
+            
+            user = authenticate(request, username=username, password=password)
+            if user:
+                # Login user directly without OTP
+                login(request, user)
+                
+                # Browser form submission: redirect to home page
+                if not _is_api_request(request):
+                    return redirect('/home/')
+                
+                # API request: return JSON success
+                return Response({'success': True, 'redirect_to_home': True}, status=status.HTTP_200_OK)
+            
+            # Authentication failed
+            if _is_api_request(request):
+                return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+            # Browser: re-render login with error message
+            return render(request, 'user/login.html', {'error': 'Invalid username or password'})
 
-        user = authenticate(request, username=username, password=password)
-        if user:
-            login(request, user)
-            # Browser form submission: redirect to home page
-            if not _is_api_request(request):
-                return redirect('/home/')
-            # API request: return JSON success
-            return Response({'success': True}, status=status.HTTP_200_OK)
+class LoginOTPVerifyAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
 
-        # Authentication failed
+    def get(self, request):
+        # For browser requests, render the OTP verification page
+        login_otp_id = request.GET.get('login_otp_id')
+        if not login_otp_id:
+            # If no OTP ID provided, redirect to login
+            return redirect('/login/')
+        
+        # Verify the OTP ID exists
+        try:
+            LoginOTP.objects.get(id=login_otp_id)
+        except LoginOTP.DoesNotExist:
+            return redirect('/login/')
+        
+        return render(request, 'user/verify_login_otp.html', {'login_otp_id': login_otp_id})
+
+    def post(self, request):
+        login_otp_id = request.data.get('login_otp_id')
+        code = request.data.get('code')
+        
+        if not login_otp_id or not code:
+            return Response({'success': False, 'error': 'Missing required fields'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            login_otp = LoginOTP.objects.get(id=login_otp_id)
+        except LoginOTP.DoesNotExist:
+            return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check max OTP entry attempts
+        if login_otp.otp_attempts >= 5:
+            login_otp.delete()
+            return Response({'success': False, 'error': 'Maximum OTP attempts exceeded. Please login again.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Validate code
+        if login_otp.code != code or login_otp.is_expired():
+            login_otp.otp_attempts += 1
+            login_otp.save()
+            attempts_left = max(0, 5 - login_otp.otp_attempts)
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Incorrect OTP. Please try again.',
+                    'attempts_left': attempts_left
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Successful verification - log the user in
+        user = login_otp.user
+        login(request, user)
+        
+        # Remove the OTP record
+        login_otp.delete()
+        
+        # For API requests, return JSON response
         if _is_api_request(request):
-            return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
-        # Browser: re-render login with error message
-        return render(request, 'user/login.html', {'error': 'Invalid username or password'})
+            return Response({'success': True, 'message': 'Login successful.'}, status=status.HTTP_200_OK)
+        
+        # For browser requests, redirect to home
+        return redirect('/home/')
+
+class ResendLoginOTPAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        login_otp_id = request.data.get('login_otp_id')
+        
+        if not login_otp_id:
+            return Response({'success': False, 'error': 'Missing login_otp_id'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            login_otp = LoginOTP.objects.get(id=login_otp_id)
+        except LoginOTP.DoesNotExist:
+            return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check expiration
+        if login_otp.is_expired():
+            login_otp.delete()
+            return Response({'success': False, 'error': 'OTP request expired, please login again.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Throttle resends
+        now = timezone.now()
+        elapsed = (now - login_otp.last_sent_at).total_seconds()
+        if elapsed < 180:  # 3 minutes
+            retry_after = int(180 - elapsed)
+            return Response({'success': False, 'error': f'Please wait {retry_after}s before resending.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        
+        if login_otp.resend_count >= 2:
+            return Response({'success': False, 'error': 'Maximum resend attempts reached.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        
+        # Generate new OTP
+        code = f"{random.randint(100000, 999999)}"
+        login_otp.code = code
+        login_otp.last_sent_at = now
+        login_otp.expires_at = now + timedelta(minutes=10)
+        login_otp.resend_count += 1
+        login_otp.save()
+        
+        # Send OTP via email
+        subject = 'Your CloudSynk Login OTP Verification Code (Resent)'
+        message = f'Use the following OTP to complete your login: {code}\n\nThis is a resend of your login OTP.\nThis code will expire in 10 minutes.'
+        
+        try:
+            send_otp_email(login_otp.email, subject, message)
+        except Exception as e:
+            logger.log(severity['ERROR'], f"Failed to resend login OTP email: {e}")
+        
+        resends_left = max(0, 2 - login_otp.resend_count)
+        return Response({'success': True, 'resend_count': login_otp.resend_count, 'resends_left': resends_left}, status=status.HTTP_200_OK)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class LogoutAPIView(APIView):

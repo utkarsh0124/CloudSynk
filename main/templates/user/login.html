@@ -40,6 +40,21 @@
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+    .login-method-tab {
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .login-method-tab.active {
+        background: linear-gradient(135deg, #174ea6 0%, #4285f4 100%);
+        color: white;
+    }
+    .login-method-tab:not(.active) {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+    .login-method-tab:not(.active):hover {
+        background: #e5e7eb;
+    }
 </style>
 {% endblock %}
 
@@ -67,6 +82,30 @@
             <form id="login-form" method="post">
                 {% csrf_token %}
                 <div class="space-y-6">
+                    <!-- Login Method Selector -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            <i class="fas fa-shield-alt mr-2 text-gray-400"></i>Login Method
+                        </label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div 
+                                id="method-password" 
+                                class="login-method-tab active text-center py-3 rounded-lg font-medium"
+                                data-method="password"
+                            >
+                                <i class="fas fa-key mr-2"></i>Password
+                            </div>
+                            <div 
+                                id="method-otp" 
+                                class="login-method-tab text-center py-3 rounded-lg font-medium"
+                                data-method="otp"
+                            >
+                                <i class="fas fa-envelope mr-2"></i>OTP via Email
+                            </div>
+                        </div>
+                        <input type="hidden" id="login_method" name="login_method" value="password">
+                    </div>
+
                     <!-- Username Field -->
                     <div>
                         <label for="username" class="block text-sm font-medium text-gray-700 mb-2">
@@ -82,8 +121,8 @@
                         >
                     </div>
 
-                    <!-- Password Field -->
-                    <div>
+                    <!-- Password Field (shown for password method) -->
+                    <div id="password-container">
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
                             <i class="fas fa-lock mr-2 text-gray-400"></i>Password
                         </label>
@@ -103,6 +142,22 @@
                             >
                                 <i class="fas fa-eye"></i>
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- OTP Info (shown for OTP method) -->
+                    <div id="otp-info" class="hidden">
+                        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-info-circle text-blue-500"></i>
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm text-blue-700">
+                                        Click "Send OTP" to receive a 6-digit verification code at your registered email address. No password required.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

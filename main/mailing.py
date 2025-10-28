@@ -16,6 +16,7 @@ def send_otp_email(new_user_email, subject, body):
     msg = MIMEMultipart()
     msg["From"] = sender_email
     msg["To"] = receiver_email
+
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
     try:

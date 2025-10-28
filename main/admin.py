@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
-from .models import UserInfo, Blob, Directory, Sharing
+from .models import UserInfo, Blob, Directory, Sharing, LoginOTP, PendingUser
 from .subscription_config import SUBSCRIPTION_VALUES
 from storage_webapp import logger, severity
 
@@ -106,11 +106,45 @@ class SharingAdmin(admin.ModelAdmin):
     readonly_fields = ('object_id',)
 
 
+class LoginOTPAdmin(admin.ModelAdmin):
+    """
+    Custom admin interface for LoginOTP model
+    """
+    list_display = ('user', 'email', 'code', 'created_at', 'expires_at', 'otp_attempts', 'resend_count', 'is_expired_status')
+    list_filter = ('created_at', 'expires_at')
+    search_fields = ('user__username', 'email', 'code')
+    readonly_fields = ('created_at', 'last_sent_at')
+    
+    def is_expired_status(self, obj):
+        """Display whether OTP is expired"""
+        return obj.is_expired()
+    is_expired_status.short_description = 'Expired'
+    is_expired_status.boolean = True
+
+
+class PendingUserAdmin(admin.ModelAdmin):
+    """
+    Custom admin interface for PendingUser model
+    """
+    list_display = ('username', 'email', 'code', 'created_at', 'expires_at', 'otp_attempts', 'resend_count', 'is_expired_status')
+    list_filter = ('created_at', 'expires_at')
+    search_fields = ('username', 'email', 'code')
+    readonly_fields = ('password', 'created_at', 'last_sent_at')
+    
+    def is_expired_status(self, obj):
+        """Display whether OTP is expired"""
+        return obj.is_expired()
+    is_expired_status.short_description = 'Expired'
+    is_expired_status.boolean = True
+
+
 # Register models with custom admin classes
 admin.site.register(UserInfo, UserInfoAdmin)
 admin.site.register(Blob, BlobAdmin)
 admin.site.register(Directory, DirectoryAdmin)
 admin.site.register(Sharing, SharingAdmin)
+admin.site.register(LoginOTP, LoginOTPAdmin)
+admin.site.register(PendingUser, PendingUserAdmin)
 
 # Customize admin site headers
 admin.site.site_header = "CloudSynk Administration"

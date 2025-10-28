@@ -465,6 +465,7 @@ class Container:
             
             # Check for existing session in database
             if UploadSession.objects.filter(upload_id=upload_id).exists():
+
                 logger.log(severity['WARNING'], f"Upload session {upload_id} already exists")
                 return {'success': False, 'error': 'Upload session already exists'}
             
@@ -485,6 +486,7 @@ class Container:
             else:
                 logger.log(severity['DEBUG'], f"Using blob name: {blob_name}")
             
+
             # Create persistent upload session in database
             upload_session = UploadSession.objects.create(
                 upload_id=upload_id,
@@ -495,6 +497,7 @@ class Container:
             )
             
             logger.log(severity['INFO'], f"STREAMING UPLOAD: Initialized persistent session Upload ID:{upload_id} for BlobName:{blob_name}")
+
             return {'success': True, 'blob_name': blob_name}
             
         except Exception as e:
@@ -629,7 +632,6 @@ class Container:
             uploaded_blocks = upload_session.uploaded_blocks
             uploaded_size = upload_session.uploaded_size
             start_time = upload_session.created_at
-            
             logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelling {upload_id}, cleaning up {len(uploaded_blocks)} staged blocks")
             
             # Clean up all staged blocks from Azure (best effort - some may not exist yet)
@@ -735,7 +737,7 @@ class Container:
             
             logger.log(severity['DEBUG'], f"DOWNLOAD STREAM: Creating range stream for blob {blob_id} ({blob_name}), range {start}-{end}")
             return blob_client.download_blob(offset=start, length=end - start + 1)
-            
+
         except Exception as e:
             logger.log(severity['ERROR'], f"Failed to get blob stream range for {blob_id}: {str(e)}")
             return None

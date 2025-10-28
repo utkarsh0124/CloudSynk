@@ -13,6 +13,7 @@ source ../az_intf
 # Set production environment variables
 export DEBUG=false
 export DJANGO_DEBUG=false
+
 # export ALLOWED_HOSTS="183.83.223.40,www.cloudsynk.org.in,cloudsynk.org.in,localhost,127.0.0.1"
 export DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY 
 
@@ -75,6 +76,7 @@ if [ -z "$DJANGO_SECRET_KEY" ]; then
     exit 1
 fi
 
+=======
 # Check if Python version file exists and clean up
 if [ -f "python_version.tmp" ]; then
     rm -rf python_version.tmp
