@@ -13,8 +13,32 @@ source ../az_intf
 # Set production environment variables
 export DEBUG=false
 export DJANGO_DEBUG=false
-export ALLOWED_HOSTS="your-domain.com,www.your-domain.com"  # UPDATE THIS
-export DJANGO_SECRET_KEY=""  # MUST BE SET FROM SECURE SOURCE
+# export ALLOWED_HOSTS="183.83.223.40,www.cloudsynk.org.in,cloudsynk.org.in,localhost,127.0.0.1"
+export DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY 
+
+# External IP Configuration
+export EXTERNAL_IP=${EXTERNAL_IP}
+# Default NGINX port is already set by start-prod.sh; fallback for env
+export NGINX_PORT=${NGINX_PORT:-80}
+export SERVER_NAME=${SERVER_NAME:-"localhost"}
+
+# ALLOWED_HOSTS: add production hosts if not explicitly set
+if [ -z "$ALLOWED_HOSTS" ]; then
+    # Include external IP, hostname, and both www/non-www domains
+    ALLOWED_HOSTS_LIST=("localhost" "127.0.0.1" "ubuntu-24")
+    if [ -n "$EXTERNAL_IP" ]; then
+        ALLOWED_HOSTS_LIST+=("$EXTERNAL_IP")
+    fi
+    ALLOWED_HOSTS_LIST+=("www.cloudsynk.org.in" "cloudsynk.org.in")
+    export ALLOWED_HOSTS=$(IFS=,; echo "${ALLOWED_HOSTS_LIST[*]}")
+fi
+
+# CSRF Trusted Origins - Update with your production domains and ports
+CSRF_BASE_ORIGINS=("https://${EXTERNAL_IP}:${NGINX_PORT}" "http://${EXTERNAL_IP}:${NGINX_PORT}" "https://localhost:${NGINX_PORT}" "http://localhost:${NGINX_PORT}" "https://www.cloudsynk.org.in:${NGINX_PORT}" "https://cloudsynk.org.in:${NGINX_PORT}" "http://www.cloudsynk.org.in:${NGINX_PORT}" "http://cloudsynk.org.in:${NGINX_PORT}")
+# Also add common ports 80/443 for external access
+CSRF_BASE_ORIGINS+=("https://${EXTERNAL_IP}:443" "http://${EXTERNAL_IP}:80" "https://www.cloudsynk.org.in:443" "http://www.cloudsynk.org.in:80" "https://cloudsynk.org.in:443" "http://cloudsynk.org.in:80")
+export CSRF_TRUSTED_ORIGINS=$(IFS=,; echo "${CSRF_BASE_ORIGINS[*]}")
+
 export SECURE_SSL_REDIRECT=true
 export SESSION_COOKIE_SECURE=true
 export CSRF_COOKIE_SECURE=true
@@ -51,12 +75,6 @@ if [ -z "$DJANGO_SECRET_KEY" ]; then
     exit 1
 fi
 
-if [ "$ALLOWED_HOSTS" = "your-domain.com,www.your-domain.com" ]; then
-    echo "❌ ERROR: ALLOWED_HOSTS still contains default values!"
-    echo "   Update with your actual production domain(s)"
-    exit 1
-fi
-
 # Check if Python version file exists and clean up
 if [ -f "python_version.tmp" ]; then
     rm -rf python_version.tmp
@@ -82,16 +100,41 @@ if [ ! -s venv.tmp ]; then
     exit 1
 fi
 
+# Install system dependencies for Python packages
+echo "🔧 Installing system dependencies..."
+if command -v apt-get >/dev/null 2>&1; then
+    # Check if we need to install MySQL client dependencies
+    if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists mysqlclient 2>/dev/null; then
+        echo "📦 Installing MySQL client development packages..."
+        if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y pkg-config python3-dev default-libmysqlclient-dev build-essential
+        else
+            echo "❌ Need sudo access to install system packages:"
+            echo "   sudo apt-get install pkg-config python3-dev default-libmysqlclient-dev build-essential"
+            exit 1
+        fi
+    fi
+else
+    echo "⚠️  Non-Debian system detected. Ensure these packages are installed:"
+    echo "   - pkg-config"
+    echo "   - mysql-devel (or equivalent)"
+    echo "   - python3-dev"
+    echo "   - build tools (gcc, make)"
+fi
+
 # Install production dependencies
 if [ "storage-env-prod" != "$(cat venv.tmp)" ]; then
     source ${BASE_DIR}/.storage-env-prod/bin/activate
     
     # Install production requirements with security updates
     python3 -m pip install --upgrade pip
-    python3 -m pip install -r requirements.txt
+    
+    echo "📦 Installing Python packages from requirements-prod.txt..."
+    python3 -m pip install -r requirements-prod.txt
     
     # Install additional production packages
-    python3 -m pip install gunicorn whitenoise django-environ psycopg2-binary
+    # python3 -m pip install gunicorn whitenoise django-environ psycopg2-binary
 fi
 rm -rf venv.tmp
 
@@ -167,6 +210,9 @@ if [ ! -d "media" ]; then
     mkdir -p media
     echo "✅ Created media directory"
 fi
+
+sudo sqlite3 db.sqlite3 "PRAGMA journal_mode=WAL;"
+sudo sqlite3 db.sqlite3 "PRAGMA synchronous=NORMAL;"
 
 echo ""
 echo "🚀 NEXT STEPS FOR PRODUCTION DEPLOYMENT:"

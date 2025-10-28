@@ -1,10 +1,11 @@
 import time
 import base64
 import re
+import json
 
 # from django.contrib.auth.models import User
 from azure.storage.blob import ContainerClient, BlobServiceClient
-from main.models import UserInfo, Blob
+from main.models import UserInfo, Blob, UploadSession
 from az_intf.api_utils import utils as app_utils
 from main.subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
 from storage_webapp import logger, severity
@@ -28,16 +29,32 @@ class Container:
             logger.log(severity['ERROR'], "FAILED TO INITIALIZE CONTAINER CLIENT")
             # Object not created
             assert False
-        self.__container_client = self.__service_client.get_container_client(self.__user_obj.container_name)
+        # Ensure container name is lowercase (Azure requirement)
+        container_name_lower = self.__user_obj.container_name.lower()
+        self.__container_client = self.__service_client.get_container_client(container_name_lower)
 
         # dictionary of key=blob name, value=blob object
         self.__blob_obj_dict = {blob_obj.blob_id: blob_obj for blob_obj in Blob.objects.filter(user_id=self.__user_obj.user_id)}
         
-        # Track ongoing streaming uploads - Phase 1 optimization
-        self.__active_uploads = {}
+        # Clean up expired upload sessions on initialization
+        self._cleanup_expired_sessions()
         
         # add debug log 
         logger.log(severity['DEBUG'], "CONTAINER INIT : User Name : {}, Container Name : {}, Blob Count : {}".format(username, self.__user_obj.container_name, len(self.__blob_obj_dict)))
+    
+    def _cleanup_expired_sessions(self):
+        """Clean up expired upload sessions from database"""
+        try:
+            from django.utils import timezone
+            expired_sessions = UploadSession.objects.filter(
+                last_activity__lt=timezone.now() - timezone.timedelta(hours=1)
+            )
+            count = expired_sessions.count()
+            if count > 0:
+                expired_sessions.delete()
+                logger.log(severity['INFO'], f"Cleaned up {count} expired upload sessions")
+        except Exception as e:
+            logger.log(severity['WARNING'], f"Failed to cleanup expired sessions: {str(e)}")
 
     @staticmethod
     def user_exists(username:str):
@@ -45,11 +62,11 @@ class Container:
 
     @classmethod
     def container_create(cls, 
-                         user_obj,
-                         username:str, 
-                         container_name:str, 
-                         # make sure this is Models.EmailField type
-                         email_id):
+                        user_obj,
+                        username:str, 
+                        container_name:str, 
+                        # make sure this is Models.EmailField type
+                        email_id):
         create_success=False
         ''' 
         AZURE API call to create a container for a user
@@ -97,7 +114,7 @@ class Container:
                 return True
             user_info.save()
             logger.log(severity['DEBUG'], "CONTAINER CREATE : User Name : {}, Container Name : {}, Email ID : {}".format(username, container_name, email_id))
-             
+            
             create_success = True
         except Exception as error:
             logger.log(severity['ERROR'], "SAMPLE CONTAINER CREATE EXCEPTION : {}".format(error))
@@ -205,9 +222,9 @@ class Container:
         # validate against user's quota
         if self.__user_obj.storage_used_bytes + new_blob_size > self.__user_obj.storage_quota_bytes:
             logger.log(severity['DEBUG'], "BLOB VALIDATION FAILED : User Name : {}, Used : {}, Quota : {}, New Blob Size : {}".format(self.__user_name,
-                       self.__user_obj.storage_used_bytes,
-                       self.__user_obj.storage_quota_bytes,
-                       new_blob_size))
+                    self.__user_obj.storage_used_bytes,
+                    self.__user_obj.storage_quota_bytes,
+                    new_blob_size))
             return (False, "Storage quota exceeded. Please delete some files before uploading new ones or Upgrade your Subscription")
         
         # validate blob name uniqueness (using sanitized name)
@@ -442,12 +459,12 @@ class Container:
     # =============================================================================
 
     def initialize_streaming_upload(self, file_name, upload_id, total_size):
-        """Initialize a streaming upload session for direct-to-Azure chunk uploading"""
+        """Initialize a streaming upload session for direct-to-Azure chunk uploading with persistent storage"""
         try:
             logger.log(severity['DEBUG'], f"STREAMING UPLOAD INIT: file_name={file_name}, upload_id={upload_id}, total_size={total_size}")
             
-            # Check for existing session
-            if upload_id in self.__active_uploads:
+            # Check for existing session in database
+            if UploadSession.objects.filter(upload_id=upload_id).exists():
                 logger.log(severity['WARNING'], f"Upload session {upload_id} already exists")
                 return {'success': False, 'error': 'Upload session already exists'}
             
@@ -468,24 +485,16 @@ class Container:
             else:
                 logger.log(severity['DEBUG'], f"Using blob name: {blob_name}")
             
-            # Create blob client for Azure operations
-            blob_client = self.__service_client.get_blob_client(
-                container=self.__user_obj.container_name, 
-                blob=blob_name
+            # Create persistent upload session in database
+            upload_session = UploadSession.objects.create(
+                upload_id=upload_id,
+                user=self.__user_obj.user,
+                blob_name=blob_name,
+                total_size=total_size,
+                container_name=self.__user_obj.container_name
             )
             
-            # Initialize upload session tracking
-            self.__active_uploads[upload_id] = {
-                'blob_client': blob_client,
-                'blob_name': blob_name,
-                'file_name': file_name,
-                'total_size': total_size,
-                'uploaded_blocks': [],
-                'uploaded_size': 0,
-                'start_time': time.time()
-            }
-            
-            logger.log(severity['INFO'], f"STREAMING UPLOAD: Initialized session Upload ID:{upload_id} for BlobName:{blob_name}")
+            logger.log(severity['INFO'], f"STREAMING UPLOAD: Initialized persistent session Upload ID:{upload_id} for BlobName:{blob_name}")
             return {'success': True, 'blob_name': blob_name}
             
         except Exception as e:
@@ -493,14 +502,24 @@ class Container:
             return {'success': False, 'error': 'Failed to initialize upload session'}
 
     def append_chunk_to_blob(self, upload_id, chunk_data, chunk_index):
-        """Stream a chunk directly to Azure blob storage using stage_block"""
+        """Stream a chunk directly to Azure blob storage using stage_block with persistent session storage"""
         try:
-            if upload_id not in self.__active_uploads:
-                logger.log(severity['ERROR'], f"Upload session {upload_id} not found")
+            # Get upload session from database
+            try:
+                upload_session = UploadSession.objects.get(upload_id=upload_id)
+            except UploadSession.DoesNotExist:
+                logger.log(severity['ERROR'], f"Upload session {upload_id} not found in database")
                 return {'success': False, 'error': 'Upload session not found'}
             
-            upload_session = self.__active_uploads[upload_id]
-            blob_client = upload_session['blob_client']
+            # Update session activity
+            upload_session.update_activity()
+            
+            # Create blob client for Azure operations
+            container_name = upload_session.container_name.lower()
+            blob_client = self.__service_client.get_blob_client(
+                container=container_name, 
+                blob=upload_session.blob_name
+            )
             
             # Generate block ID (must be base64 encoded and same length for all blocks)
             block_id = base64.b64encode(f"block-{chunk_index:08d}".encode()).decode()
@@ -522,12 +541,15 @@ class Container:
             )
             logger.log(severity['DEBUG'], f"Staged block {block_id} for {upload_id}, size={chunk_size}")
             
-            # Track the staged block
-            upload_session['uploaded_blocks'].append(block_id)
-            upload_session['uploaded_size'] += chunk_size
+            # Update persistent session data
+            uploaded_blocks = upload_session.uploaded_blocks
+            uploaded_blocks.append(block_id)
+            upload_session.uploaded_blocks = uploaded_blocks
+            upload_session.uploaded_size += chunk_size
+            upload_session.save(update_fields=['uploaded_blocks', 'uploaded_size', 'last_activity'])
             
             logger.log(severity['DEBUG'], f"STREAMING UPLOAD: Successfully staged chunk {chunk_index} for {upload_id}")
-            return {'success': True, 'uploaded_size': upload_session['uploaded_size']}
+            return {'success': True, 'uploaded_size': upload_session.uploaded_size}
             
         except Exception as e:
             logger.log(severity['ERROR'], f"Failed to append chunk {chunk_index} for upload {upload_id}: {str(e)}")
@@ -536,16 +558,24 @@ class Container:
     def finalize_streaming_upload(self, upload_id, file_name):
         """Finalize the streaming upload by committing all staged blocks and creating DB record"""
         try:
-            if upload_id not in self.__active_uploads:
-                logger.log(severity['ERROR'], f"Upload session {upload_id} not found")
+            # Get upload session from database
+            try:
+                upload_session = UploadSession.objects.get(upload_id=upload_id)
+            except UploadSession.DoesNotExist:
+                logger.log(severity['ERROR'], f"Upload session {upload_id} not found in database")
                 return {'success': False, 'error': 'Upload session not found'}
             
-            upload_session = self.__active_uploads[upload_id]
-            blob_client = upload_session['blob_client']
-            blob_name = upload_session['blob_name']
-            total_uploaded = upload_session['uploaded_size']
-            uploaded_blocks = upload_session['uploaded_blocks']
-            start_time = upload_session['start_time']
+            # Create blob client for Azure operations
+            container_name = upload_session.container_name.lower()
+            blob_client = self.__service_client.get_blob_client(
+                container=container_name, 
+                blob=upload_session.blob_name
+            )
+            
+            blob_name = upload_session.blob_name
+            total_uploaded = upload_session.uploaded_size
+            uploaded_blocks = upload_session.uploaded_blocks
+            start_time = upload_session.created_at
             
             logger.log(severity['DEBUG'], f"STREAMING UPLOAD: Finalizing {upload_id}, committing {len(uploaded_blocks)} blocks")
             
@@ -562,10 +592,11 @@ class Container:
             self.__user_obj.save()
             
             # Calculate upload duration
-            duration = time.time() - start_time
+            from django.utils import timezone
+            duration = (timezone.now() - start_time).total_seconds()
             
-            # Cleanup upload session
-            del self.__active_uploads[upload_id]
+            # Cleanup upload session from database
+            upload_session.delete()
             
             logger.log(severity['INFO'], f"STREAMING UPLOAD: Successfully finalized {upload_id}, blob_id={assigned_blob_id}, duration={duration:.2f}s")
             return {
@@ -577,24 +608,27 @@ class Container:
             
         except Exception as e:
             logger.log(severity['ERROR'], f"Failed to finalize streaming upload {upload_id}: {str(e)}")
-            # Cleanup failed session
-            if upload_id in self.__active_uploads:
-                del self.__active_uploads[upload_id]
+            # Cleanup failed session from database
+            try:
+                UploadSession.objects.filter(upload_id=upload_id).delete()
+            except:
+                pass
             return {'success': False, 'error': 'Failed to finalize upload'}
 
     def cancel_streaming_upload(self, upload_id):
         """Cancel an ongoing streaming upload and cleanup all staged blocks"""
         try:
-            if upload_id not in self.__active_uploads:
+            # Get upload session from database
+            try:
+                upload_session = UploadSession.objects.get(upload_id=upload_id)
+            except UploadSession.DoesNotExist:
                 logger.log(severity['WARNING'], f"Upload session {upload_id} not found for cancellation")
                 return {'success': False, 'error': 'Upload session not found'}
             
-            upload_session = self.__active_uploads[upload_id]
-            blob_client = upload_session['blob_client']
-            blob_name = upload_session['blob_name']
-            uploaded_blocks = upload_session['uploaded_blocks']
-            uploaded_size = upload_session['uploaded_size']
-            start_time = upload_session['start_time']
+            blob_name = upload_session.blob_name
+            uploaded_blocks = upload_session.uploaded_blocks
+            uploaded_size = upload_session.uploaded_size
+            start_time = upload_session.created_at
             
             logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelling {upload_id}, cleaning up {len(uploaded_blocks)} staged blocks")
             
@@ -610,10 +644,11 @@ class Container:
                     cleanup_errors.append(f"Block {block_id}: {str(e)}")
             
             # Calculate duration for logging
-            duration = time.time() - start_time
+            from django.utils import timezone
+            duration = (timezone.now() - start_time).total_seconds()
             
-            # Remove upload session from tracking
-            del self.__active_uploads[upload_id]
+            # Remove upload session from database
+            upload_session.delete()
             
             logger.log(severity['INFO'], f"STREAMING UPLOAD: Cancelled {upload_id}, duration={duration:.2f}s, uploaded_size={uploaded_size}")
             
@@ -629,24 +664,35 @@ class Container:
         except Exception as e:
             logger.log(severity['ERROR'], f"Failed to cancel streaming upload {upload_id}: {str(e)}")
             # Force cleanup of session even if error occurred
-            if upload_id in self.__active_uploads:
-                del self.__active_uploads[upload_id]
+            try:
+                UploadSession.objects.filter(upload_id=upload_id).delete()
+            except:
+                pass
             return {'success': False, 'error': f'Failed to cancel upload: {str(e)}'}
 
     def get_active_upload_sessions(self):
-        """Get list of all active upload sessions for this user"""
+        """Get list of all active upload sessions for this user from database"""
         try:
+            # Clean up expired sessions first
+            self._cleanup_expired_sessions()
+            
+            # Get active sessions from database
+            upload_sessions = UploadSession.objects.filter(user=self.__user_obj.user)
             active_sessions = []
-            for upload_id, session in self.__active_uploads.items():
+            
+            for session in upload_sessions:
+                from django.utils import timezone
+                duration = (timezone.now() - session.created_at).total_seconds()
                 active_sessions.append({
-                    'upload_id': upload_id,
-                    'file_name': session['file_name'],
-                    'blob_name': session['blob_name'],
-                    'total_size': session['total_size'],
-                    'uploaded_size': session['uploaded_size'],
-                    'uploaded_blocks': len(session['uploaded_blocks']),
-                    'start_time': session['start_time'],
-                    'duration': time.time() - session['start_time']
+                    'upload_id': session.upload_id,
+                    'file_name': session.blob_name,  # Using blob_name as file_name
+                    'blob_name': session.blob_name,
+                    'total_size': session.total_size,
+                    'uploaded_size': session.uploaded_size,
+                    'uploaded_blocks': len(session.uploaded_blocks),
+                    'start_time': session.created_at.timestamp(),
+                    'duration': duration,
+                    'last_activity': session.last_activity.timestamp()
                 })
             
             logger.log(severity['DEBUG'], f"ACTIVE UPLOADS: User {self.__user_name} has {len(active_sessions)} active sessions")
