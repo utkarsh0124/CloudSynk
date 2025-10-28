@@ -76,7 +76,6 @@ if [ -z "$DJANGO_SECRET_KEY" ]; then
     exit 1
 fi
 
-=======
 # Check if Python version file exists and clean up
 if [ -f "python_version.tmp" ]; then
     rm -rf python_version.tmp
