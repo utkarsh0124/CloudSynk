@@ -11,6 +11,7 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storage_webapp.settings')
+# Use settings module from environment variable (defaults to production settings)
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storage_webapp.settings_prod')
 
 application = get_wsgi_application()

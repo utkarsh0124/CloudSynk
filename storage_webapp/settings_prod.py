@@ -34,13 +34,22 @@ if os.environ.get('DATABASE_URL'):
         'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
     }
 else:
-    # Fallback to SQLite with warning (not recommended for production)
+    # Fallback to SQLite stored in persistent location
+    # This is NOT recommended for production but provides data persistence
     import warnings
-    warnings.warn("Using SQLite in production is not recommended. Set DATABASE_URL environment variable.")
+    warnings.warn("Using SQLite in production is not recommended. Set DATABASE_URL environment variable for PostgreSQL/MySQL.")
+    
+    # Store database outside the code directory to persist across deployments
+    DB_DIR = Path(os.environ.get('DB_DIR', '/var/lib/cloudsynk'))
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db_prod.sqlite3',
+            'NAME': DB_DIR / 'db_prod.sqlite3',
+            'OPTIONS': {
+                'timeout': 20,  # Prevent database locks
+            }
         }
     }
 
@@ -70,9 +79,9 @@ SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 ENABLE_API_ENDPOINTS = os.environ.get('ENABLE_API_ENDPOINTS', 'false').lower() == 'true'
 
 # Production session settings
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Keep user logged in even after browser close
-SESSION_COOKIE_AGE = 24 * 60 * 60  # 24 hours (86400 seconds)
-SESSION_SAVE_EVERY_REQUEST = True  # Extend session on each request (rolling expiration)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_AGE = 30 * 60  # 30 minutes
+SESSION_SAVE_EVERY_REQUEST = True
 
 # Static files configuration for production
 STATIC_URL = '/static/'
@@ -100,7 +109,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Logging Configuration
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': False,
+    'disable_existing_loggers': False,  # Important: Don't disable the custom logger
     'formatters': {
         'verbose': {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
@@ -113,9 +122,11 @@ LOGGING = {
     },
     'handlers': {
         'file': {
-            'level': 'WARNING',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django_prod.log',
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'log' / 'django_prod.log',
+            'maxBytes': 50 * 1024 * 1024,  # 50 MB
+            'backupCount': 10,
             'formatter': 'verbose',
         },
         'console': {
@@ -126,17 +137,23 @@ LOGGING = {
     },
     'root': {
         'handlers': ['file', 'console'],
-        'level': 'WARNING',
+        'level': 'INFO',  # Changed from WARNING to INFO
     },
     'loggers': {
         'django': {
             'handlers': ['file', 'console'],
-            'level': 'WARNING',
+            'level': 'INFO',  # Changed from WARNING to INFO
             'propagate': False,
         },
         'storage_webapp': {
             'handlers': ['file', 'console'],
-            'level': 'WARNING',
+            'level': 'INFO',  # Changed from WARNING to INFO
+            'propagate': False,
+        },
+        'cloudsynk': {
+            # Custom logger - let it use its own handlers from logger.py
+            'handlers': [],
+            'level': 'DEBUG',
             'propagate': False,
         },
     },
@@ -221,10 +238,11 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
-# Remove test servers from allowed hosts in production
+# Remove test servers from allowed hosts in production (but keep localhost for local deployments)
 if 'testserver' in ALLOWED_HOSTS:
     ALLOWED_HOSTS.remove('testserver')
-if 'localhost' in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.remove('localhost')
+# Note: localhost is kept for local production deployments
+# if 'localhost' in ALLOWED_HOSTS:
+#     ALLOWED_HOSTS.remove('localhost')
 
 print("🔒 Production settings loaded with security hardening enabled")

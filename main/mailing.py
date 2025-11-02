@@ -12,26 +12,48 @@ app_password = os.environ.get("APP_PASSWORD", "your_app_password")
 def send_otp_email(new_user_email, subject, body):
     """
     Send an email via Gmail SMTP for OTP delivery.
-    
-    Args:
-        new_user_email: The recipient's email address
-        subject: Email subject line
-        body: Email body content
+    For SIGNUP: Sends to RECEIVER_EMAIL (admin/testing email)
+    For LOGIN: Use send_login_otp_email() instead
     """
     msg = MIMEMultipart()
     msg["From"] = sender_email
-    msg["To"] = new_user_email  # Use the actual recipient email
+    msg["To"] = receiver_email  # For signup, always send to RECEIVER_EMAIL
+
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(sender_email, app_password)
-        server.sendmail(sender_email, new_user_email, msg.as_string())  # Send to actual recipient
-        print(f"✅ Email sent successfully to {new_user_email}!")
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+        print(f"✅ Signup OTP email sent successfully to {receiver_email}!")
     except Exception as e:
-        print(f"❌ Error sending email to {new_user_email}:", e)
-        raise  # Re-raise the exception so calling code can handle it
+        print(f"❌ Error sending signup OTP: {e}")
+        raise  # Re-raise to be caught by views.py logging
+    finally:
+        server.quit()
+
+
+def send_login_otp_email(user_email, subject, body):
+    """
+    Send login OTP email via Gmail SMTP.
+    For LOGIN: Sends to the actual user's registered email address
+    """
+    msg = MIMEMultipart()
+    msg["From"] = sender_email
+    msg["To"] = user_email  # For login, send to actual user's email
+
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(sender_email, app_password)
+        server.sendmail(sender_email, user_email, msg.as_string())
+        print(f"✅ Login OTP email sent successfully to {user_email}!")
+    except Exception as e:
+        print(f"❌ Error sending login OTP: {e}")
+        raise  # Re-raise to be caught by views.py logging
     finally:
         server.quit()
 

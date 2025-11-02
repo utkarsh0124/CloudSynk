@@ -141,3 +141,31 @@ class LoginOTP(models.Model):
 
     def is_expired(self):
         return timezone.now() > self.expires_at
+
+
+class UploadSession(models.Model):
+    """Model to store persistent upload session data across worker processes"""
+    upload_id = models.CharField(max_length=100, unique=True, primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    blob_name = models.CharField(max_length=MAX_BLOB_NAME_LENGTH)
+    total_size = models.BigIntegerField()
+    uploaded_size = models.BigIntegerField(default=0)
+    uploaded_blocks = models.JSONField(default=list)  # Store list of uploaded block IDs
+    container_name = models.CharField(max_length=250)
+    created_at = models.DateTimeField(default=timezone.now)
+    last_activity = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['last_activity']),
+        ]
+    
+    def is_expired(self, timeout_minutes=60):
+        """Check if session has been inactive for too long"""
+        return timezone.now() > self.last_activity + timezone.timedelta(minutes=timeout_minutes)
+    
+    def update_activity(self):
+        """Update last activity timestamp"""
+        self.last_activity = timezone.now()
+        self.save(update_fields=['last_activity'])

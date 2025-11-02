@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-*jyk_u%7a@)39bh5t57g@jqa6ot-h6en@2$kx0)-t-h&5cms^_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["testserver", "localhost"]
+ALLOWED_HOSTS = ["cloudsynk.org.in", "www.cloudsynk.org.in"]
 
 # Feature flag to enable explicit API endpoints. Default is False for production safety.
 # Set via environment variable ENABLE_API_ENDPOINTS=true when you want to enable API routes.
@@ -64,7 +64,7 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = 'bootstrap5'
 CRISPY_TEMPLATE_PACK = 'bootstrap5'
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
+    # 'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -141,6 +141,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (User uploaded content)
 MEDIA_URL = '/media/'
@@ -176,3 +177,7 @@ SITE_ID = 1
 AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
 )
+# Disable HTTPS redirect for HTTP-only deployment
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False

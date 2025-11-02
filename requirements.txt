@@ -15,8 +15,8 @@ idna==3.4
 isodate==0.6.1
 msal==1.23.0
 msal-extensions==1.0.0
-numpy==1.24.4
-pandas==2.0.3
+numpy==1.26.4
+pandas==2.1.4
 portalocker==2.7.0
 pycparser==2.21
 PyJWT==2.8.0
