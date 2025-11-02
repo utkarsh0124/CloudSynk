@@ -42,7 +42,12 @@ class Logger:
         self.logger.addHandler(file_handler)
 
     def __get_log_file_name(self):
-        log_directory = "log"
+        # Use absolute path to ensure logs are written to correct location
+        # even when Gunicorn changes working directory
+        # __file__ is /home/utsingh/workspace/CloudSynk/logger.py
+        # dirname(__file__) is /home/utsingh/workspace/CloudSynk
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        log_directory = os.path.join(base_dir, "log")
         os.makedirs(log_directory, exist_ok=True)
         # Use fixed filename for continuous logging across restarts
         return os.path.join(log_directory, 'cloudsynk.log')

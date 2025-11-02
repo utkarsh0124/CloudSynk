@@ -169,6 +169,8 @@ Environment="DEBUG=false"
 Environment="DJANGO_DEBUG=false"
 Environment="PYTHONPATH=$PROJECT_DIR/../:\$PYTHONPATH"
 Environment="TMPDIR=$PROJECT_DIR/tmp"
+Environment="DB_DIR=/var/lib/cloudsynk"
+Environment="BACKUP_DIR=/var/backups/cloudsynk"
 ExecStart=$PROJECT_DIR/.storage-env-prod/bin/gunicorn \\
     --config $PROJECT_DIR/gunicorn_prod.conf.py \\
     $DJANGO_PROJECT.wsgi:application

@@ -11,8 +11,7 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-# Force use of regular settings, not settings_prod
-os.environ['DJANGO_SETTINGS_MODULE'] = 'storage_webapp.settings'
-os.environ['SECURE_SSL_REDIRECT'] = 'false'
+# Use settings module from environment variable (defaults to production settings)
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storage_webapp.settings_prod')
 
 application = get_wsgi_application()

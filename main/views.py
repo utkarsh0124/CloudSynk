@@ -403,13 +403,17 @@ class LoginAPIView(APIView):
             password = request.data.get('password') or request.POST.get('password')
             
             if not password:
+                logger.log(severity['WARNING'], f"Login failed: Missing password for username='{username}'")
                 if _is_api_request(request):
                     return Response({'success': False, 'error': 'Password is required'}, status=status.HTTP_400_BAD_REQUEST)
                 return render(request, 'user/login.html', {'error': 'Password is required'})
             
+            logger.log(severity['INFO'], f"Login attempt for username='{username}'")
             user = authenticate(request, username=username, password=password)
+            
             if user:
                 # Login user directly without OTP
+                logger.log(severity['INFO'], f"✅ Authentication successful for username='{username}', logging in user")
                 login(request, user)
                 
                 # Browser form submission: redirect to home page
@@ -420,6 +424,7 @@ class LoginAPIView(APIView):
                 return Response({'success': True, 'redirect_to_home': True}, status=status.HTTP_200_OK)
             
             # Authentication failed
+            logger.log(severity['WARNING'], f"❌ Authentication failed for username='{username}' - invalid credentials")
             if _is_api_request(request):
                 return Response({'success': False, 'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
             # Browser: re-render login with error message

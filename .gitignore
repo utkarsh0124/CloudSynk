@@ -10,3 +10,4 @@ node_modules/
 scripts/reports/
 .storage-env-prod
 staticfiles
+cache
