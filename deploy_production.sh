@@ -108,9 +108,11 @@ mkdir -p "$PROJECT_DIR/tmp"
 # Fix log file ownership
 echo "🔧 Setting up log file permissions..."
 touch "$PROJECT_DIR/log/cloudsynk.log"
+touch "$PROJECT_DIR/log/django_prod.log"
 chown utsingh:utsingh "$PROJECT_DIR/log/cloudsynk.log"
-
+chown utsingh:utsingh "$PROJECT_DIR/log/django_prod.log"
 chmod 664 "$PROJECT_DIR/log/cloudsynk.log"
+chmod 664 "$PROJECT_DIR/log/django_prod.log"
 
 # Run the production environment setup as root (as per your requirement)
 echo "🔧 Setting up production environment..."
