@@ -304,12 +304,14 @@ fi
 echo "🧪 Testing Nginx configuration..."
 sudo nginx -t
 
-# Fix permissions on log and static directories
+# Fix permissions on log, static, and cache directories
 echo "🔧 Fixing directory permissions..."
 sudo chown -R utsingh:utsingh "$PROJECT_DIR/log"
 sudo chown -R utsingh:utsingh "$PROJECT_DIR/staticfiles" 2>/dev/null || mkdir -p "$PROJECT_DIR/staticfiles" && chown -R utsingh:utsingh "$PROJECT_DIR/staticfiles"
+sudo chown -R utsingh:utsingh "$PROJECT_DIR/cache" 2>/dev/null || mkdir -p "$PROJECT_DIR/cache" && chown -R utsingh:utsingh "$PROJECT_DIR/cache"
 chmod 755 "$PROJECT_DIR/log"
 chmod 755 "$PROJECT_DIR/staticfiles" 2>/dev/null || true
+chmod 755 "$PROJECT_DIR/cache" 2>/dev/null || true
 
 # Collect static files
 echo "📦 Collecting static files..."
