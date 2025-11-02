@@ -143,10 +143,20 @@ errorlog = "/var/log/cloudsynk/gunicorn_error.log"
 accesslog = "/var/log/cloudsynk/gunicorn_access.log"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"'
 loglevel = "info"
-preload_app = True
+preload_app = False  # Must be False to allow logger reinitialization in workers
 enable_stdio_inheritance = True
 daemon = False
 pidfile = "$PROJECT_DIR/cloudsynk_gunicorn.pid"
+
+def post_worker_init(worker):
+    """Called after a worker has been forked - reinitialize logger for this worker"""
+    from logger import Logger
+    # Reset singleton and reinitialize logger for this worker process
+    Logger._instance = None
+    Logger.init_logger()
+    # Test log to confirm worker initialized
+    from storage_webapp import logger, severity
+    logger.info(f"Worker {worker.pid} initialized with logger")
 EOF
 
 # Create systemd service for CloudSynk
@@ -292,14 +302,28 @@ fi
 echo "🧪 Testing Nginx configuration..."
 sudo nginx -t
 
+# Fix permissions on log and static directories
+echo "🔧 Fixing directory permissions..."
+sudo chown -R utsingh:utsingh "$PROJECT_DIR/log"
+sudo chown -R utsingh:utsingh "$PROJECT_DIR/staticfiles" 2>/dev/null || mkdir -p "$PROJECT_DIR/staticfiles" && chown -R utsingh:utsingh "$PROJECT_DIR/staticfiles"
+chmod 755 "$PROJECT_DIR/log"
+chmod 755 "$PROJECT_DIR/staticfiles" 2>/dev/null || true
+
 # Collect static files
 echo "📦 Collecting static files..."
 source "$PROJECT_DIR/.storage-env-prod/bin/activate"
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput --settings=storage_webapp.settings_prod
+
+# Verify static files manifest
+if [ -f "$PROJECT_DIR/staticfiles/staticfiles.json" ]; then
+    echo "  ✅ Static files manifest generated successfully"
+else
+    echo "  ⚠️  Warning: Static files manifest not found"
+fi
 
 # Run migrations
 echo "🗄️ Running database migrations..."
-python manage.py migrate --noinput
+python manage.py migrate --noinput --settings=storage_webapp.settings_prod
 
 # Setup systemd service
 echo "🔧 Setting up systemd service..."
