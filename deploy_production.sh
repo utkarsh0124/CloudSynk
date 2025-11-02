@@ -179,7 +179,7 @@ upstream gunicorn_backend {
 # HTTP server - Redirect all traffic to HTTPS
 server {
     listen 80;
-    server_name cloudsynk.org.in www.cloudsynk.org.in 183.83.223.40;
+    server_name cloudsynk.org.in www.cloudsynk.org.in;
     
     # Redirect all HTTP requests to HTTPS
     return 301 https://$host$request_uri;
@@ -311,7 +311,6 @@ echo ""
 echo "🌐 Your CloudSynk app is now available at:"
 echo "   http://cloudsynk.org.in"
 echo "   http://www.cloudsynk.org.in"
-echo "   http://183.83.223.40"
 echo ""
 echo "📋 Monitoring Commands:"
 echo "   App logs:      tail -f log/cloudsynk.log"

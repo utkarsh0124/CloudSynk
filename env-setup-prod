@@ -14,7 +14,7 @@ source ../az_intf
 export DEBUG=false
 export DJANGO_DEBUG=false
 
-# export ALLOWED_HOSTS="183.83.223.40,www.cloudsynk.org.in,cloudsynk.org.in,localhost,127.0.0.1"
+
 export DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY 
 
 # External IP Configuration
