@@ -34,7 +34,7 @@ class Logger:
         console_handler.setFormatter(formatter)
 
         # Use fixed log file name for continuous logging
-        file_handler = RotatingFileHandler(self.__get_log_file_name(), maxBytes=10*1024*1024, backupCount=10)
+        file_handler = RotatingFileHandler(self.__get_log_file_name(), maxBytes=50*1024*1024, backupCount=10)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
 

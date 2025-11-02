@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from .serializers import UserSerializer, OTPVerifySerializer
 from az_intf.api_utils import utils as app_utils
 from az_intf import api as az_api
-from .models import UserInfo, PendingUser
+from .models import UserInfo, PendingUser, LoginOTP
 from django.contrib.auth.hashers import make_password
 from storage_webapp.settings import DEFAULT_SUBSCRIPTION_AT_INIT
 from .subscription_config import SUBSCRIPTION_CHOICES, SUBSCRIPTION_VALUES
@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import render
 from django.conf import settings
 from django.core.mail import send_mail  # keep for backward compatibility if needed
-from .mailing import send_otp_email
+from .mailing import send_otp_email, send_login_otp_email
 from apiConfig import AZURE_API_DISABLE
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -66,12 +66,16 @@ class SignupAPIView(APIView):
     def post(self, request):
         data = request.data.copy()
         if 'username' not in data:
+            logger.log(severity['WARNING'], f"Signup attempt failed: Missing username field")
             return Response({'success': False, 'error': 'Username is a required field'}, status=status.HTTP_400_BAD_REQUEST)
         if 'password1' not in data or 'password2' not in data:
+            logger.log(severity['WARNING'], f"Signup attempt failed: Missing password fields for username={data.get('username')}")
             return Response({'success': False, 'error': 'Password Fields are required'}, status=status.HTTP_400_BAD_REQUEST)
         if data.get('password1') != data.get('password2'):
+            logger.log(severity['WARNING'], f"Signup attempt failed: Password mismatch for username={data.get('username')}")
             return Response({'success': False, 'error': 'Passwords Do Not Match'}, status=status.HTTP_400_BAD_REQUEST)
         if 'email' not in data:
+            logger.log(severity['WARNING'], f"Signup attempt failed: Missing email field for username={data.get('username')}")
             return Response({'success': False, 'error': 'Email is a required field'}, status=status.HTTP_400_BAD_REQUEST)
 
         data['password'] = data.get('password1')
@@ -79,6 +83,7 @@ class SignupAPIView(APIView):
 
         serializer = UserSerializer(data=data)
         if not serializer.is_valid():
+            logger.log(severity['WARNING'], f"Signup attempt failed: Invalid data for username={data.get('username')}, errors={serializer.errors}")
             return Response({'success': False, 'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         username = serializer.validated_data['username']
@@ -86,14 +91,18 @@ class SignupAPIView(APIView):
         email = serializer.validated_data.get('email')
 
         if app_utils.user_exists(username):
+            logger.log(severity['WARNING'], f"Signup attempt failed: Username '{username}' already exists")
             return Response({'success': False, 'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
         # Stage user signup in SignupRequest
         code = f"{random.randint(100000, 999999)}"
         expires_at = timezone.now() + timedelta(minutes=10)
+        logger.log(severity['INFO'], f"Signup initiated for username='{username}', email='{email}', OTP code generated")
+        
         # Create or update pending signup to avoid duplicates
         pending = PendingUser.objects.filter(username=username).first()
         if pending:
             if pending.is_expired():
+                logger.log(severity['INFO'], f"Deleted expired pending signup for username='{username}'")
                 pending.delete()
                 pending = PendingUser.objects.create(
                     username=username,
@@ -102,7 +111,9 @@ class SignupAPIView(APIView):
                     code=code,
                     expires_at=expires_at
                 )
+                logger.log(severity['INFO'], f"Created new pending signup for username='{username}', pending_id={pending.id}")
             else:
+                logger.log(severity['INFO'], f"Updated existing pending signup for username='{username}', pending_id={pending.id}")
                 pending.code = code
                 pending.expires_at = expires_at
                 pending.password = make_password(password)
@@ -116,15 +127,35 @@ class SignupAPIView(APIView):
                 code=code,
                 expires_at=expires_at
             )
+            logger.log(severity['INFO'], f"Created new pending signup for username='{username}', pending_id={pending.id}")
+        
         # Send OTP via email
         subject = 'Your CloudSynk OTP Verification Code'
-        message = f'Use the following OTP to verify your account: {code}'
+        message = f'''Hello,
+
+A signup request has been made for CloudSynk with the following details:
+
+Username: {username}
+Email: {email}
+
+Your OTP verification code is: {code}
+
+This code will expire in 10 minutes.
+
+If you did not request this, please ignore this email.
+
+Best regards,
+CloudSynk Team'''
         from_email = settings.DEFAULT_FROM_EMAIL
-        # Send OTP via SMTP utility
+        
+        # Send OTP via SMTP utility (for signup, sends to RECEIVER_EMAIL env variable)
         try:
+            logger.log(severity['INFO'], f"Attempting to send signup OTP email for username='{username}', user_email='{email}' (sent to RECEIVER_EMAIL env)")
             send_otp_email(email, subject, message)
+            logger.log(severity['INFO'], f"✅ Signup OTP email sent successfully for username='{username}', pending_id={pending.id}")
         except Exception as e:
-            logger.log(severity['ERROR'], f"Failed to send OTP email: {e}")
+            logger.log(severity['ERROR'], f"❌ Failed to send signup OTP email for username='{username}': {e}")
+        
         # Return response indicating OTP sent (API) or render OTP page (browser)
         if _is_api_request(request):
             return Response({'success': True, 'message': 'OTP sent to email.', 'pending_id': pending.id}, status=status.HTTP_201_CREATED)
@@ -136,19 +167,32 @@ class OTPVerifyAPIView(APIView):
     def post(self, request):
         pending_id = request.data.get('pending_id')
         code = request.data.get('code')
+        
+        logger.log(severity['INFO'], f"OTP verification attempt for pending_id={pending_id}")
+        
         try:
             pending = PendingUser.objects.get(id=pending_id)
         except PendingUser.DoesNotExist:
+            logger.log(severity['WARNING'], f"OTP verification failed: Invalid pending_id={pending_id}")
             return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        
         # Check max OTP entry attempts
         if pending.otp_attempts >= 5:
+            logger.log(severity['WARNING'], f"OTP verification failed: Maximum attempts exceeded for username='{pending.username}', email='{pending.email}'")
             pending.delete()
             return Response({'success': False, 'error': 'Maximum OTP attempts exceeded. Please signup again.'}, status=status.HTTP_403_FORBIDDEN)
+        
         # Validate code
         if pending.code != code or pending.is_expired():
             pending.otp_attempts += 1
             pending.save()
             attempts_left = max(0, 5 - pending.otp_attempts)
+            
+            if pending.is_expired():
+                logger.log(severity['WARNING'], f"OTP verification failed: Expired OTP for username='{pending.username}', email='{pending.email}'")
+            else:
+                logger.log(severity['WARNING'], f"OTP verification failed: Incorrect code for username='{pending.username}', email='{pending.email}', attempts_left={attempts_left}")
+            
             return Response(
                 {
                     'success': False,
@@ -157,7 +201,10 @@ class OTPVerifyAPIView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
         # Successful verification, proceed
+        logger.log(severity['INFO'], f"✅ OTP verified successfully for username='{pending.username}', email='{pending.email}'")
+        
         # Create actual user with hashed password
         user = User.objects.create(
             username=pending.username,
@@ -166,13 +213,21 @@ class OTPVerifyAPIView(APIView):
         )
         user.is_active = True
         user.save()
+        logger.log(severity['INFO'], f"User account created: username='{user.username}', email='{user.email}', user_id={user.id}")
 
         # Initialize container
-        created = az_api.init_container(user, user.username, app_utils.assign_container(user.username), user.email)
+        container_name = app_utils.assign_container(user.username)
+        created = az_api.init_container(user, user.username, container_name, user.email)
         if not created:
+            logger.log(severity['ERROR'], f"❌ Container initialization failed for username='{user.username}', email='{user.email}'")
             return Response({'success': False, 'error': 'Container initialization failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        logger.log(severity['INFO'], f"✅ Container initialized successfully for username='{user.username}', container='{container_name}'")
+        
         # Remove pending registration
         pending.delete()
+        logger.log(severity['INFO'], f"✅ Account activation complete for username='{user.username}', email='{user.email}'")
+        
         return Response({'success': True, 'message': 'Account created and activated.'}, status=status.HTTP_200_OK)
 
 class ResendOTPAPIView(APIView):
@@ -181,23 +236,35 @@ class ResendOTPAPIView(APIView):
     def post(self, request):
         pending_id = request.data.get('pending_id')
         if not pending_id:
+            logger.log(severity['WARNING'], f"Resend OTP failed: Missing pending_id")
             return Response({'success': False, 'error': 'Missing pending_id'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             pending = PendingUser.objects.get(id=pending_id)
         except PendingUser.DoesNotExist:
+            logger.log(severity['WARNING'], f"Resend OTP failed: Invalid pending_id={pending_id}")
             return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.log(severity['INFO'], f"Resend OTP request for username='{pending.username}', email='{pending.email}'")
+        
         # Check expiration
         if pending.is_expired():
+            logger.log(severity['WARNING'], f"Resend OTP failed: Expired request for username='{pending.username}', email='{pending.email}'")
             pending.delete()
             return Response({'success': False, 'error': 'OTP request expired, please signup again.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         # Throttle resends
         now = timezone.now()
         elapsed = (now - pending.last_sent_at).total_seconds()
         if elapsed < 180:
             retry_after = int(180 - elapsed)
+            logger.log(severity['WARNING'], f"Resend OTP throttled: username='{pending.username}', email='{pending.email}', retry_after={retry_after}s")
             return Response({'success': False, 'error': f'Please wait {retry_after}s before resending.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        
         if pending.resend_count >= 2:
+            logger.log(severity['WARNING'], f"Resend OTP failed: Maximum resend attempts reached for username='{pending.username}', email='{pending.email}'")
             return Response({'success': False, 'error': 'Maximum resend attempts reached.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        
         # Generate new OTP
         code = f"{random.randint(100000, 999999)}"
         pending.code = code
@@ -205,15 +272,36 @@ class ResendOTPAPIView(APIView):
         pending.expires_at = now + timedelta(minutes=10)
         pending.resend_count += 1
         pending.save()
+        
+        logger.log(severity['INFO'], f"New OTP generated for username='{pending.username}', email='{pending.email}', resend_count={pending.resend_count}")
+        
         # Send OTP via email
-        subject = 'Your CloudSynk OTP Verification Code'
-        message = f'Use the following OTP to verify your account: {code}'
-        # Send OTP via SMTP utility
-        try:
-            send_otp_email(pending.email, subject, message)
+        subject = 'Your CloudSynk OTP Verification Code (Resent)'
+        message = f'''Hello,
 
+A signup request has been made for CloudSynk with the following details:
+
+Username: {pending.username}
+Email: {pending.email}
+
+Your OTP verification code is: {code}
+
+This code will expire in 10 minutes.
+Resend attempt: {pending.resend_count} of 3
+
+If you did not request this, please ignore this email.
+
+Best regards,
+CloudSynk Team'''
+        
+        # Send OTP via SMTP utility (for signup, sends to RECEIVER_EMAIL env variable)
+        try:
+            logger.log(severity['INFO'], f"Attempting to resend signup OTP email for username='{pending.username}' (sent to RECEIVER_EMAIL env)")
+            send_otp_email(pending.email, subject, message)
+            logger.log(severity['INFO'], f"✅ Signup OTP email resent successfully for username='{pending.username}'")
         except Exception as e:
-            logger.log(severity['ERROR'], f"Failed to resend OTP email: {e}")
+            logger.log(severity['ERROR'], f"❌ Failed to resend signup OTP email for username='{pending.username}': {e}")
+        
         resends_left = max(0, 2 - pending.resend_count)
         return Response({'success': True, 'resend_count': pending.resend_count, 'resends_left': resends_left}, status=status.HTTP_200_OK)
 
@@ -262,9 +350,12 @@ class LoginAPIView(APIView):
         
         # Handle OTP-only login (passwordless)
         if login_method == 'otp':
+            logger.log(severity['INFO'], f"Login OTP request for username='{username}'")
+            
             try:
                 user = User.objects.get(username=username)
             except User.DoesNotExist:
+                logger.log(severity['WARNING'], f"Login OTP failed: User not found for username='{username}'")
                 if _is_api_request(request):
                     return Response({'success': False, 'error': 'User not found'}, status=status.HTTP_400_BAD_REQUEST)
                 return render(request, 'user/login.html', {'error': 'User not found'})
@@ -284,14 +375,18 @@ class LoginAPIView(APIView):
                 expires_at=expires_at
             )
             
+            logger.log(severity['INFO'], f"Login OTP generated for username='{username}', email='{user.email}', login_otp_id={login_otp.id}")
+            
             # Send OTP via email
             subject = 'Your CloudSynk Login OTP Verification Code'
             message = f'Use the following OTP to complete your login: {code}\n\nThis code will expire in 10 minutes.\n\nYou requested passwordless login via OTP.'
             
             try:
-                send_otp_email(user.email, subject, message)
+                logger.log(severity['INFO'], f"Attempting to send login OTP email to '{user.email}' for username='{username}'")
+                send_login_otp_email(user.email, subject, message)
+                logger.log(severity['INFO'], f"✅ Login OTP email sent successfully to '{user.email}' for username='{username}'")
             except Exception as e:
-                logger.log(severity['ERROR'], f"Failed to send login OTP email: {e}")
+                logger.log(severity['ERROR'], f"❌ Failed to send login OTP email to '{user.email}' for username='{username}': {e}")
             
             # Return response indicating OTP sent
             if _is_api_request(request):
@@ -353,15 +448,20 @@ class LoginOTPVerifyAPIView(APIView):
         code = request.data.get('code')
         
         if not login_otp_id or not code:
+            logger.log(severity['WARNING'], f"Login OTP verification failed: Missing required fields")
             return Response({'success': False, 'error': 'Missing required fields'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.log(severity['INFO'], f"Login OTP verification attempt for login_otp_id={login_otp_id}")
         
         try:
             login_otp = LoginOTP.objects.get(id=login_otp_id)
         except LoginOTP.DoesNotExist:
+            logger.log(severity['WARNING'], f"Login OTP verification failed: Invalid login_otp_id={login_otp_id}")
             return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check max OTP entry attempts
         if login_otp.otp_attempts >= 5:
+            logger.log(severity['WARNING'], f"Login OTP verification failed: Maximum attempts exceeded for username='{login_otp.user.username}', email='{login_otp.email}'")
             login_otp.delete()
             return Response({'success': False, 'error': 'Maximum OTP attempts exceeded. Please login again.'}, status=status.HTTP_403_FORBIDDEN)
         
@@ -370,6 +470,12 @@ class LoginOTPVerifyAPIView(APIView):
             login_otp.otp_attempts += 1
             login_otp.save()
             attempts_left = max(0, 5 - login_otp.otp_attempts)
+            
+            if login_otp.is_expired():
+                logger.log(severity['WARNING'], f"Login OTP verification failed: Expired OTP for username='{login_otp.user.username}', email='{login_otp.email}'")
+            else:
+                logger.log(severity['WARNING'], f"Login OTP verification failed: Incorrect code for username='{login_otp.user.username}', email='{login_otp.email}', attempts_left={attempts_left}")
+            
             return Response(
                 {
                     'success': False,
@@ -381,7 +487,10 @@ class LoginOTPVerifyAPIView(APIView):
         
         # Successful verification - log the user in
         user = login_otp.user
+        logger.log(severity['INFO'], f"✅ Login OTP verified successfully for username='{user.username}', email='{login_otp.email}'")
+        
         login(request, user)
+        logger.log(severity['INFO'], f"✅ User logged in successfully via OTP: username='{user.username}', email='{user.email}'")
         
         # Remove the OTP record
         login_otp.delete()
@@ -400,15 +509,20 @@ class ResendLoginOTPAPIView(APIView):
         login_otp_id = request.data.get('login_otp_id')
         
         if not login_otp_id:
+            logger.log(severity['WARNING'], f"Resend login OTP failed: Missing login_otp_id")
             return Response({'success': False, 'error': 'Missing login_otp_id'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             login_otp = LoginOTP.objects.get(id=login_otp_id)
         except LoginOTP.DoesNotExist:
+            logger.log(severity['WARNING'], f"Resend login OTP failed: Invalid login_otp_id={login_otp_id}")
             return Response({'success': False, 'error': 'Invalid request reference'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.log(severity['INFO'], f"Resend login OTP request for username='{login_otp.user.username}', email='{login_otp.email}'")
         
         # Check expiration
         if login_otp.is_expired():
+            logger.log(severity['WARNING'], f"Resend login OTP failed: Expired request for username='{login_otp.user.username}', email='{login_otp.email}'")
             login_otp.delete()
             return Response({'success': False, 'error': 'OTP request expired, please login again.'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -417,9 +531,11 @@ class ResendLoginOTPAPIView(APIView):
         elapsed = (now - login_otp.last_sent_at).total_seconds()
         if elapsed < 180:  # 3 minutes
             retry_after = int(180 - elapsed)
+            logger.log(severity['WARNING'], f"Resend login OTP throttled: username='{login_otp.user.username}', email='{login_otp.email}', retry_after={retry_after}s")
             return Response({'success': False, 'error': f'Please wait {retry_after}s before resending.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         
         if login_otp.resend_count >= 2:
+            logger.log(severity['WARNING'], f"Resend login OTP failed: Maximum resend attempts reached for username='{login_otp.user.username}', email='{login_otp.email}'")
             return Response({'success': False, 'error': 'Maximum resend attempts reached.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         
         # Generate new OTP
@@ -430,14 +546,18 @@ class ResendLoginOTPAPIView(APIView):
         login_otp.resend_count += 1
         login_otp.save()
         
+        logger.log(severity['INFO'], f"New login OTP generated for username='{login_otp.user.username}', email='{login_otp.email}', resend_count={login_otp.resend_count}")
+        
         # Send OTP via email
         subject = 'Your CloudSynk Login OTP Verification Code (Resent)'
         message = f'Use the following OTP to complete your login: {code}\n\nThis is a resend of your login OTP.\nThis code will expire in 10 minutes.'
         
         try:
-            send_otp_email(login_otp.email, subject, message)
+            logger.log(severity['INFO'], f"Attempting to resend login OTP email to '{login_otp.email}' for username='{login_otp.user.username}'")
+            send_login_otp_email(login_otp.email, subject, message)
+            logger.log(severity['INFO'], f"✅ Login OTP email resent successfully to '{login_otp.email}' for username='{login_otp.user.username}'")
         except Exception as e:
-            logger.log(severity['ERROR'], f"Failed to resend login OTP email: {e}")
+            logger.log(severity['ERROR'], f"❌ Failed to resend login OTP email to '{login_otp.email}' for username='{login_otp.user.username}': {e}")
         
         resends_left = max(0, 2 - login_otp.resend_count)
         return Response({'success': True, 'resend_count': login_otp.resend_count, 'resends_left': resends_left}, status=status.HTTP_200_OK)
@@ -535,6 +655,11 @@ class DeleteBlobAPIView(APIView):
         if api_instance:
             if not api_instance.blob_delete(blob_id):
                 return Response({'success': False, 'error': 'Blob deletion failed'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # CRITICAL: Invalidate cached container to ensure all workers see blob deletion
+            from az_intf.api import del_container_instance
+            del_container_instance(request.user.username)
+            logger.log(severity['DEBUG'], f"DELETE BLOB: Invalidated container cache for multi-worker consistency")
             
             # Always return JSON response
             return Response({'success': True}, status=status.HTTP_200_OK)
@@ -849,6 +974,12 @@ class ChunkedUploadAPIView(APIView):
                 logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Finalize result: {finalize_result}")
                 if finalize_result['success']:
                     logger.log(severity['INFO'], f"CHUNKED UPLOAD: Upload completed successfully")
+                    
+                    # CRITICAL: Invalidate cached container to ensure all workers see new blob
+                    from az_intf.api import del_container_instance
+                    del_container_instance(request.user.username)
+                    logger.log(severity['DEBUG'], f"CHUNKED UPLOAD: Invalidated container cache for multi-worker consistency")
+                    
                     return Response({
                         'success': True, 
                         'completed': True,

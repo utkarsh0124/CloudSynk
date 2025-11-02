@@ -100,7 +100,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Logging Configuration
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': False,
+    'disable_existing_loggers': False,  # Important: Don't disable the custom logger
     'formatters': {
         'verbose': {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
@@ -113,9 +113,11 @@ LOGGING = {
     },
     'handlers': {
         'file': {
-            'level': 'WARNING',
-            'class': 'logging.FileHandler',
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
             'filename': BASE_DIR / 'logs' / 'django_prod.log',
+            'maxBytes': 50 * 1024 * 1024,  # 50 MB
+            'backupCount': 10,
             'formatter': 'verbose',
         },
         'console': {
@@ -126,17 +128,23 @@ LOGGING = {
     },
     'root': {
         'handlers': ['file', 'console'],
-        'level': 'WARNING',
+        'level': 'INFO',  # Changed from WARNING to INFO
     },
     'loggers': {
         'django': {
             'handlers': ['file', 'console'],
-            'level': 'WARNING',
+            'level': 'INFO',  # Changed from WARNING to INFO
             'propagate': False,
         },
         'storage_webapp': {
             'handlers': ['file', 'console'],
-            'level': 'WARNING',
+            'level': 'INFO',  # Changed from WARNING to INFO
+            'propagate': False,
+        },
+        'cloudsynk': {
+            # Custom logger - let it use its own handlers from logger.py
+            'handlers': [],
+            'level': 'DEBUG',
             'propagate': False,
         },
     },
@@ -221,10 +229,11 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
-# Remove test servers from allowed hosts in production
+# Remove test servers from allowed hosts in production (but keep localhost for local deployments)
 if 'testserver' in ALLOWED_HOSTS:
     ALLOWED_HOSTS.remove('testserver')
-if 'localhost' in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.remove('localhost')
+# Note: localhost is kept for local production deployments
+# if 'localhost' in ALLOWED_HOSTS:
+#     ALLOWED_HOSTS.remove('localhost')
 
 print("🔒 Production settings loaded with security hardening enabled")
