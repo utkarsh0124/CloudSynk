@@ -131,6 +131,10 @@ if [ "storage-env-prod" != "$(cat venv.tmp)" ]; then
     # Install production requirements with security updates
     python3 -m pip install --upgrade pip
     
+    # Install build dependencies first (required for packages like numpy)
+    echo "📦 Installing build dependencies (setuptools, wheel)..."
+    python3 -m pip install --upgrade setuptools wheel
+    
     echo "📦 Installing Python packages from requirements-prod.txt..."
     python3 -m pip install -r requirements-prod.txt
     
