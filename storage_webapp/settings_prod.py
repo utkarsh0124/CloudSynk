@@ -34,13 +34,22 @@ if os.environ.get('DATABASE_URL'):
         'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
     }
 else:
-    # Fallback to SQLite with warning (not recommended for production)
+    # Fallback to SQLite stored in persistent location
+    # This is NOT recommended for production but provides data persistence
     import warnings
-    warnings.warn("Using SQLite in production is not recommended. Set DATABASE_URL environment variable.")
+    warnings.warn("Using SQLite in production is not recommended. Set DATABASE_URL environment variable for PostgreSQL/MySQL.")
+    
+    # Store database outside the code directory to persist across deployments
+    DB_DIR = Path(os.environ.get('DB_DIR', '/var/lib/cloudsynk'))
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db_prod.sqlite3',
+            'NAME': DB_DIR / 'db_prod.sqlite3',
+            'OPTIONS': {
+                'timeout': 20,  # Prevent database locks
+            }
         }
     }
 

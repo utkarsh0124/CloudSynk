@@ -15,6 +15,33 @@ DJANGO_PROJECT="storage_webapp"
 # Change to project directory
 cd "$PROJECT_DIR"
 
+# Set up persistent database directory
+DB_DIR="${DB_DIR:-/var/lib/cloudsynk}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/cloudsynk}"
+export DB_DIR
+export BACKUP_DIR
+
+echo "📁 Setting up persistent database storage..."
+sudo mkdir -p "$DB_DIR"
+sudo chown utsingh:utsingh "$DB_DIR"
+sudo chmod 755 "$DB_DIR"
+
+sudo mkdir -p "$BACKUP_DIR"
+sudo chown utsingh:utsingh "$BACKUP_DIR"
+sudo chmod 755 "$BACKUP_DIR"
+
+# Backup existing database if it exists
+if [ -f "$DB_DIR/db_prod.sqlite3" ]; then
+    echo "💾 Creating pre-deployment database backup..."
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    BACKUP_FILE="$BACKUP_DIR/pre_deploy_${TIMESTAMP}.sqlite3"
+    sqlite3 "$DB_DIR/db_prod.sqlite3" ".backup '$BACKUP_FILE'" 2>/dev/null || true
+    if [ -f "$BACKUP_FILE" ]; then
+        gzip "$BACKUP_FILE"
+        echo "  ✅ Backup created: ${BACKUP_FILE}.gz"
+    fi
+fi
+
 # Stop any running servers
 echo "📊 Stopping any running Django development servers..."
 pkill -f "python manage.py runserver" || true
